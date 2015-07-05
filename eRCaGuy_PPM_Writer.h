@@ -3,10 +3,14 @@ eRCaGuy_PPM_Writer
 -an >=11-bit, jitter-free (hardware-based) RC PPM signal writer for the Arduino!
 By Gabriel Staples
 http://www.ElectricRCAircraftGuy.com 
-Written: 2 July 2015
-Last Updated: 2 July 2015
+Library Written: 2 July 2015
+Library Last Updated: 5 July 2015
+Versioning System: Semantic Versioning 2.0.0 (http://semver.org/)
+Current Library Version 0.1.0
 
-Version 0.1
+History (newest on top):
+
+20150703 - First working version, V0.1.0, released
 */
 
 /*
@@ -46,7 +50,7 @@ Version 0.1
 
 //Constants
 const byte MAX_NUM_CHANNELS = 16;
-const byte MIN_NUM_CHANNELS = 4; 
+const byte MIN_NUM_CHANNELS = 1; 
 const byte DEFAULT_NUM_CHANNELS = 8;
 const unsigned int DEFAULT_MAX_CHANNEL_VAL = 2100*2; //0.5us units
 const unsigned int DEFAULT_MIN_CHANNEL_VAL = 900*2; //0.5us
@@ -66,8 +70,8 @@ class eRCaGuy_PPM_Writer
   
   //"set" methods 
   //primary methods
-  void setChannelValue(byte channel,unsigned int channelValue); //write the 0.5us value to channel (ie: write your desired microsecond value x 2); NB: CHANNELS ARE ZERO-INDEXED. ie: the 1st channel is 0, 2nd channel is 1, etc.
-  void setPeriod(unsigned int pd); //0.5us
+  void setChannelVal(byte channel_i,unsigned int channelValue); //write the 0.5us value to channel index channel_i (ie: write your desired microsecond value x 2); NB: CHANNELS ARE ZERO-INDEXED. ie: the 1st channel is 0, 2nd channel is 1, etc. Also, the channelValues are in timer counts, which are 0.5us per count. Therefore, a value of 1500us is 3000 0.5us counts.
+  void setPPMPeriod(unsigned long pd); //0.5us
   //secondary methods
   void setNumChannels(byte numChannels);
   void setMaxChannelVal(unsigned int maxVal); //0.5us
@@ -79,8 +83,9 @@ class eRCaGuy_PPM_Writer
   
   //"get" methods 
   //primary methods
-  unsigned int getChannelValue(byte channel); //0.5us
-  unsigned int getPeriod(); //0.5us
+  unsigned int getChannelVal(byte channel_i); //0.5us
+  unsigned long getPPMPeriod(); //0.5us
+  float getPPMFrequency(); //Hz
   //secondary methods
   byte getNumChannels();
   unsigned int getMaxChannelVal(); //0.5us
@@ -89,13 +94,13 @@ class eRCaGuy_PPM_Writer
   unsigned int getChannelSpace(); //0.5us
   unsigned long getFrameNumber();
   boolean getPPMPolarity();
-  byte getCurrentChannel(); //returns the PPM channel which is *in the process of being* or *about to be* written!
-  unsigned long getTimeSinceFrameStart(); //0.5us; returns the time, in 0.5us counts, which will be the time elapsed at the start of the NEXT Compare Match A interrupt, since the beginning of this PPM Frame
+  byte getCurrentChannel(); //returns the PPM channel index for the channel which is *in the process of being* or *about to be* written!
+  unsigned long getTimeSincePPMFrameStart(); //0.5us; returns the time, in 0.5us counts, which will be the time elapsed at the start of the NEXT Compare Match A interrupt, since the beginning of this PPM Frame
   
   //other methods
   void begin(); //configures the timer and begins PPM output 
   void end(); //ends PPM output, but otherwise leaves the timer settings as-is
-  boolean readChannelFlag(byte channel); //each channel has a flag (single bit) that is set true when the channel value is completed being written, and the flag is cleared once a true value is read via this function; this is useful if you want to have some sort of event-driven programming that does something immediately after a specific channel value is written; ex: "while(readChannelFlag(channel)==false){};" will stay in the while loop until that channel value is written to the PPM signal
+  boolean readChannelFlag(byte channel_i); //each channel has a flag (single bit) that is set true when the channel value is completed being written, and the flag is cleared once a true value is read via this function; this is useful if you want to have some sort of event-driven programming that does something immediately after a specific channel value is written; ex: "while(readChannelFlag(channel_i)==false){};" will stay in the while loop until that channel value is written to the PPM signal
   void compareMatchISR(); //interrupt service routine for output compare matches
   
   private:
@@ -120,7 +125,7 @@ class eRCaGuy_PPM_Writer
   enum state_t {FIRST_EDGE,SECOND_EDGE};
   state_t _currentState;
   //volatile variables (since they are changed in ISR, but may be read in the main code)
-  volatile byte _currentChannel; //zero-based channel # (ie: channel index) which is the PPM channel which is *in the process of being* or *about to be* written!
+  volatile byte _currentChannel_i; //zero-based channel # (ie: channel index) which is the PPM channel which is *in the process of being* or *about to be* written!
   volatile unsigned long _timeSinceFrameStart; //0.5us units
 };
 

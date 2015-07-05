@@ -5,8 +5,9 @@ http://www.ElectricRCAircraftGuy.com
 
 FOR PERTINENT INFORMATION ABOUT THIS LIBRARY SEE THE TOP OF THE HEADER (.h) FILE, AND THE COMMENTS IN BOTH THIS FILE AND THE HEADER FILE.
 
-For help on   
-ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {} see here: http://www.nongnu.org/avr-libc/user-manual/group__util__atomic.html
+For help on ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {} see here: http://www.nongnu.org/avr-libc/user-manual/group__util__atomic.html
+
+Pin Mapping: https://www.arduino.cc/en/Hacking/PinMapping168
 */
 
 /*
@@ -47,6 +48,13 @@ ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {} see here: http://www.nongnu.org/avr-libc/us
 //macros
 #define readPinA() (PINB & _BV(1)) //Arduino pin 9
 #define togglePinA() (TCCR1C = _BV(FOC1A)) //see datasheet pg. 135 & 132; force OC1A pin (Arduino D9) to toggle; datasheet pg. 132: setting one or both of the COM1A1:0 bits to 1 overrides the normal port functionality of the I/O pin it is connected to, so this is how you must toggle the pin; digitalWrite(9,HIGH/LOW) on pin 9 will NOT work anymore on this pin; note, however, that *reading* the pin port directly, or calling digitalRead(9) DOES still work!
+
+//Direct Port Access digital Writes: writing the pin HIGH or LOW this way works ONLY when the PPM signal is NOT being output (ie: before PPMWRiter.begin() or after PPMWriter.end())
+#define makePinAOUTPUT() (DDRB |= _BV(1)) //Arduino pin 9
+#define makePinAINPUT() (DDRB &= ~_BV(1)) //Arduino pin 9
+#define writePinAHIGH() (PORTB |= _BV(1)) //Arduino pin 9
+#define writePinALOW() (PORTB &= ~_BV(1)) //Arduino pin 9
+
 /* //FOR DEBUGGING/CODE SPEED MEASURING WITH OSCILLOSCOPE
 #define writePin2HIGH (PORTD |= _BV(2))
 #define writePin2LOW (PORTD &= ~_BV(2)) */
@@ -73,37 +81,37 @@ void eRCaGuy_PPM_Writer::compareMatchISR()
   if (_currentState==FIRST_EDGE)
   {
     //local variable 
-    byte lastChannel = _currentChannel - 1;
-    if (_currentChannel==0)
+    byte lastChannel_i = _currentChannel_i - 1;
+    if (_currentChannel_i==0)
     {
-      lastChannel = _numChannels; //ex: for 8 channels, lastChannel is now equal to 8. Since the 8 channels take bits 0 to 7 in the _channelFlags variable, bit 8 corresponds to the FrameSpace "channel" which occured after channel 8
+      lastChannel_i = _numChannels; //ex: for 8 channels, lastChannel_i is now equal to 8. Since the 8 channels take bits 0 to 7 in the _channelFlags variable, bit 8 corresponds to the FrameSpace "channel" which occured after channel 8
       
       //if we are on the FIRST_EDGE *AND* the first channel, then it means we are at the *VERY START* of a new PPM frame, so the last PPM frame has just completed!
       _timeSinceFrameStart = 0; //0.5us; reset
       _frameNumber++;
     }
-    //each first edge signifies the END of _currentChannel-1 and the START of _currentChannel, so let's set the bit to indicate which channel was just written!
-    bitSet(_channelFlags,lastChannel);
+    //each first edge signifies the END of _currentChannel_i-1 and the START of _currentChannel_i, so let's set the bit to indicate which channel was just written!
+    bitSet(_channelFlags,lastChannel_i);
     
     incrementVal = _channelSpace; //0.5us
     _currentState = SECOND_EDGE; //move to next state in the state machine
   }
   else //_currentState==SECOND_EDGE
   {
-    if (_currentChannel < _numChannels) 
+    if (_currentChannel_i < _numChannels) 
     {
       //we are writing a channel value 
-      incrementVal = _channels[_currentChannel] - _channelSpace; //0.5us units
-      _currentChannel++;
+      incrementVal = _channels[_currentChannel_i] - _channelSpace; //0.5us units
+      _currentChannel_i++;
     }
-    else //_currentChannel==_numChannels
+    else //_currentChannel_i==_numChannels
     {
       //we are writing a frame space value (ie: the time between the end of one PPM frame and the start of another PPM frame)
       ensurePPMPolarity();
       incrementVal = _pd - _timeSinceFrameStart; //0.5us units 
       //constrain this frame space period; ie: force a minimum value, even at the cost of not reaching the desired PPM output frequency
       incrementVal = max(incrementVal,_minFrameSpace);
-      _currentChannel = 0; //reset back to the first channel 
+      _currentChannel_i = 0; //reset back to the first channel 
     }
     _currentState = FIRST_EDGE; //move to next state in the state machine
   }
@@ -146,8 +154,10 @@ void eRCaGuy_PPM_Writer::begin()
 {
   //PPM writer state machine initialization
   _currentState = FIRST_EDGE;
-  _currentChannel = 0;
+  _currentChannel_i = 0;
   _timeSinceFrameStart = 0; //0.5us units
+  
+  makePinAOUTPUT();
   
   //configure Timer1 to NORMAL mode (see datasheet Table 16-4, pg. 133)
   //  Mode 0: WGM13=0, WGM12=0, WGM11=0, WGM10=0
@@ -159,11 +169,7 @@ void eRCaGuy_PPM_Writer::begin()
   TCCR1A = _BV(COM1A0);
   TCCR1B = _BV(CS11);
   
-  //Note: OC1A pin is Arduino D9; see here: https://www.arduino.cc/en/Hacking/PinMapping168
-  pinMode(9,OUTPUT);
-  
-  TCNT1 = 0; //reset Timer1 counter
-  OCR1A = TCNT1 + 100; //set to interrupt (to begin PPM signal generation) 50us later
+  OCR1A = TCNT1 + 100; //set to interrupt (to begin PPM signal generation) 50us (100 counts) from now
   
   //enable Output Compare A interrupt (TIMSK1, datasheet pg. 136)
   TIMSK1 = _BV(OCIE1A);  
@@ -201,7 +207,10 @@ void eRCaGuy_PPM_Writer::end()
   //turn off the Output Compare Interrupt (TIMSK1, datasheet pg. 136)
   TIMSK1 &= ~_BV(OCIE1A);  
   //disconnect OC1A (see datasheet pg 132)
-  TCCR1A &= ~(_BV(COM1A1) | _BV(COM1A0)); //note: it appears that this also forces the pin state to LOW, no matter how it was before disconnecting 0C1A; this is good
+  TCCR1A &= ~(_BV(COM1A1) | _BV(COM1A0)); //note: once OC1A is disconnected, the pin state goes back to the last state (HIGH or LOW) written to the port output register via either direct port manipulation, OR the Arduino digitalWrite() command!
+  //for pin protection (in case of dual-purposing this pin for some reason), force LOW and make input 
+  writePinALOW();
+  makePinAINPUT();
 }
 
 //--------------------------------------------------------------------------------------------------------
@@ -212,18 +221,18 @@ void eRCaGuy_PPM_Writer::end()
 //-once a flag is set true, it remains true until read by the user. Therefore, if you are reading the flag
 // for the first time, you may read a TRUE even if the flag was set a long time ago
 //--------------------------------------------------------------------------------------------------------
-boolean eRCaGuy_PPM_Writer::readChannelFlag(byte channel)
+boolean eRCaGuy_PPM_Writer::readChannelFlag(byte channel_i)
 {
   bool flagVal;
   //ensure a valid channel
-  channel = constrain(channel,0,_numChannels - 1);
+  channel_i = constrain(channel_i,0,_numChannels - 1);
   
   //ensure atomic access to volatile variables
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
   {
-    flagVal = bitRead(_channelFlags,channel);
+    flagVal = bitRead(_channelFlags,channel_i);
     if (flagVal==true) //if read true, reset the flag
-      bitClear(_channelFlags,channel);
+      bitClear(_channelFlags,channel_i);
   }
   return flagVal;
 }
@@ -233,34 +242,281 @@ boolean eRCaGuy_PPM_Writer::readChannelFlag(byte channel)
 //********************************************************************************************************
 
 //--------------------------------------------------------------------------------------------------------
-//setChannelValue 
-//-write 0.5us value to the channel. 
-//-Ex: to set the 1st channel to 1500us, call: setChannelValue(0,1500*2);
+//setChannelVal
+//-write 0.5us value to the channel located at channel index channel_i. 
+//-Channels are zero-indexed, so Channel 1 is index 0, channel 2 is index 1, etc.
+//-channel values are in units of timer counts, which are 0.5us each, so multiply us x 2 to get counts.
+//-Ex: to set the 1st channel to 1500us, call: setChannelVal(0,1500*2);
 //--------------------------------------------------------------------------------------------------------
-void eRCaGuy_PPM_Writer::setChannelValue(byte channel_i, unsigned int val)
+void eRCaGuy_PPM_Writer::setChannelVal(byte channel_i, unsigned int val)
 {
   //constrain within valid bounds
   val = constrain(val,_minChannelVal,_maxChannelVal);
+  channel_i = constrain(channel_i,0,_numChannels - 1);
+  
   //ensure atomic access to volatile variables
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
   {
-    channel_i = constrain(channel_i,0,_numChannels - 1);
     _channels[channel_i] = val;
   }
 }
 
+//--------------------------------------------------------------------------------------------------------
+//setPPMPeriod
+//-control the PPM output frequency by setting the desired PPM train frame period directly 
+//-units are 0.5us
+//-ex: setPPMPeriod(20000*2) sets a pd of 20000us (40000 0.5us counts), which results in a PPM freq. of 1/20ms=50Hz
+//-WARNING: if your channel values are all at their max values, the local variable "_minFrameSpace" acts as a safety feature to ensure the frame space after the last channel is longer than the longest channel. This is necessary because that is how a device *reading* a PPM signal finds the first frame: it knows that the *longest* frame is the frame space, and that the first channel comes after that. In the event that you set the PPM period too short, or have too many channels, with all of them maxed out, the PPM writer will force the frame space after the last channel to be at least as long as what is set in the local variable "_minFrameSpace." In this event, the PPM period will be lengthened for that frame, and the desired PPM frequency will not be reached.
+//--ex: assume 9 channels, max channel value of 2100us, PPM period set to 20ms; if all channels are simultaneously maxed out it takes 2100x9 = 18.9ms just to write the channels. To keep the 20ms PPM period, the frameSpace would have to be 20-18.9 = 1.1ms. However, THIS WILL BREAK THE SIGNAL AND PREVENT THE DEVICE READING THE PPM SIGNAL FROM DETERMINING WHERE THE START OF THE PPM FRAME IS. Therefore, the _minFrameSpace (default 3ms last I set it) will be used instead of 1.1ms. This makes the PPM frame 18.9ms + 3ms = 21.9ms (45.7Hz) instead of the desired 20ms (50Hz). Depending on your settings, since this PPM writer is totally user-customizable, you may get even more drastic results. Ex: if you were trying to fit 12 full-length channels in a 20ms PPM frame....you do the math.
+//--------------------------------------------------------------------------------------------------------
+void eRCaGuy_PPM_Writer::setPPMPeriod(unsigned long pd)
+{
+  //ensure atomic access to volatile variables
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+  {
+    _pd = pd;
+  }
+}
 
+//--------------------------------------------------------------------------------------------------------
+//setNumChannels
+//-set the number of channels to be present in the PPM train 
+//-NB: READ THE WARNING AND EXAMPLE IN THE "setPPMPeriod" DESCRIPTION ABOVE.
+//--------------------------------------------------------------------------------------------------------
+void eRCaGuy_PPM_Writer::setNumChannels(byte numChannels)
+{
+  numChannels = constrain(numChannels,MIN_NUM_CHANNELS,MAX_NUM_CHANNELS);
+  //ensure atomic access to volatile variables
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+  {
+    _numChannels = numChannels;
+  }
+}
 
+//--------------------------------------------------------------------------------------------------------
+//setMaxChannelVal
+//-set the maximum value a channel can be set to, in units of 0.5us 
+//-Ex: to set the the maximum channel value to 2100us, call: setMaxChannelVal(2100*2);
+//-NB: READ THE WARNING AND EXAMPLE IN THE "setPPMPeriod" DESCRIPTION ABOVE.
+//--------------------------------------------------------------------------------------------------------
+void eRCaGuy_PPM_Writer::setMaxChannelVal(unsigned int maxVal)
+{
+  _maxChannelVal = maxVal;
+}
+
+//--------------------------------------------------------------------------------------------------------
+//setMinChannelVal
+//-set the minimum value a channel can be set to, in units of 0.5us 
+//-Ex: to set the the minimum channel value to 900us, call: setMinChannelVal(900*2);
+//-NB: READ THE WARNING AND EXAMPLE IN THE "setPPMPeriod" DESCRIPTION ABOVE.
+//--------------------------------------------------------------------------------------------------------
+void eRCaGuy_PPM_Writer::setMinChannelVal(unsigned int minVal)
+{
+  _minChannelVal = minVal;
+}
+
+//--------------------------------------------------------------------------------------------------------
+//setMinFrameSpace
+//-set the minimum permitted frame space, in units of 0.5us
+//-the frame space is the gap of time AFTER the last channel in the PPM train, and BEFORE the first channel in the PPM train. If it is not longer than _maxChannelVal, it just looks like another channel.
+//-WARNING: TO PREVENT YOUR RC VEHICLE FROM CRASHING WHEN ALL CHANNEL VALUES ARE MAXED OUT, YOU *MUST* SET THIS VALUE TO BE *GREATER* THAN WHAT YOU SET _maxChannelVal to be. How much greater you must set it....that's dependent upon how the code in the device *reading* this PPM signal works. I think 3ms should be safe.
+//-NB: READ THE WARNING AND EXAMPLE IN THE "setPPMPeriod" DESCRIPTION ABOVE.
+//-Ex: to set the the minFrameSpace to 3000us, call: setMinFrameSpace(3000*2);
+//--------------------------------------------------------------------------------------------------------
+void eRCaGuy_PPM_Writer::setMinFrameSpace(unsigned int minFrameSpace)
+{
+  //ensure atomic access to volatile variables
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+  {
+    _minFrameSpace = minFrameSpace;
+  }
+}
+
+//--------------------------------------------------------------------------------------------------------
+//setChannelSpace
+//-set the pulse width of the spacer, in units of 0.5us, which separates channels in the PPM train. This width can vary slightly from brand to brand.
+//-Ex: to set the the channelSpace to 400us, call: setChannelSpace(400*2);
+//--------------------------------------------------------------------------------------------------------
+void eRCaGuy_PPM_Writer::setChannelSpace(unsigned int channelSpace)
+{
+  //ensure atomic access to volatile variables
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+  {
+    _channelSpace = channelSpace;
+  }
+}
+
+//--------------------------------------------------------------------------------------------------------
+//setFrameNumber
+//-manually set the frameNumber to a specific value; ex: 0, to reset it 
+//-the frameNumber is the # of PPM frames that have *already been sent*
+//-it is incremented at the first edge of a new PPM frame, which marks the end of the previous PPM frame and the start of the 1st channel of the new PPM frame 
+//--------------------------------------------------------------------------------------------------------
+void eRCaGuy_PPM_Writer::setFrameNumber(unsigned long frameNum)
+{
+  //ensure atomic access to volatile variables
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+  {
+    _frameNumber = frameNum;
+  }
+}
+
+//--------------------------------------------------------------------------------------------------------
+//setPPMPolarity
+//-set the PPM signal train to either PPM_WRITER_NORMAL or PPM_WRITER_INVERTED.
+//-PPM_WRITER_NORMAL has a HIGH base-line signal, with channelSpace pulses that are LOW 
+//-PPM_WRITER_INVERTED has a LOW base-line signal, with channelSpace pulses that are HIGH  
+//-to set the polarity to be inverted, for instance, call: setPPMPolarity(PPM_WRITER_INVERTED);
+//--------------------------------------------------------------------------------------------------------
+void eRCaGuy_PPM_Writer::setPPMPolarity(boolean PPMPolarity)
+{
+  //ensure atomic access to volatile variables
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+  {
+    _PPMPolarity = PPMPolarity;
+  }
+}
 
 //********************************************************************************************************
 //"get" methods
 //********************************************************************************************************
 
-
-
-
+//--------------------------------------------------------------------------------------------------------
+//getChannelVal
+//-read the 0.5us value currently being written on this channel index location
+//-channels are zero-indexed, so the 1st channel is at index 0
+//-the channelVal is in units of timer counts, which are 0.5us each, so divide by 2 to get us 
+//--Ex: to get the us value being written to channel 1, call: getChannelVal(0)/2;
+//--------------------------------------------------------------------------------------------------------
+unsigned int eRCaGuy_PPM_Writer::getChannelVal(byte channel_i)
+{
+  //Note: forced atomic access NOT required on _numChannels and _channels below since they are only being READ here, AND since they are NOT ever written to (modified) in an ISR 
+  channel_i = constrain(channel_i,0,_numChannels - 1);   
+  return _channels[channel_i];
+}
 
 //--------------------------------------------------------------------------------------------------------
-//
+//getPPMPeriod
+//-read the previously-set desired PPM period, in units of 0.5us.
+//--Ex: to get the desired PPM period in us, call: getPPMPeriod()/2;
 //--------------------------------------------------------------------------------------------------------
+unsigned long eRCaGuy_PPM_Writer::getPPMPeriod()
+{
+  return _pd;
+}
+
+//--------------------------------------------------------------------------------------------------------
+//getPPMFrequency()
+//-calculate and return the desired PPM frame frequency (in Hz), according to the previously commanded PPM train period (in units of 0.5us)
+//--------------------------------------------------------------------------------------------------------
+float eRCaGuy_PPM_Writer::getPPMFrequency()
+{
+  return 1000000.0/((float)_pd/2.0); //Hz
+}
+
+//--------------------------------------------------------------------------------------------------------
+//getNumChannels()
+//-return the # of channels currently being sent out in the PPM train
+//--------------------------------------------------------------------------------------------------------
+byte eRCaGuy_PPM_Writer::getNumChannels()
+{
+  return _numChannels;
+}
+
+//--------------------------------------------------------------------------------------------------------
+//getMaxChannelVal()
+//-get the max value a channel can be set to, in units of 0.5us 
+//--Ex: to get the max channel value allowed, in us, call: getMaxChannelVal()/2; 
+//--------------------------------------------------------------------------------------------------------
+unsigned int eRCaGuy_PPM_Writer::getMaxChannelVal()
+{
+  return _maxChannelVal;
+}
+
+//--------------------------------------------------------------------------------------------------------
+//getMinChannelVal()
+//-get the min value a channel can be set to, in units of 0.5us 
+//--Ex: to get the min channel value allowed, in us, call: getMinChannelVal()/2; 
+//--------------------------------------------------------------------------------------------------------
+unsigned int eRCaGuy_PPM_Writer::getMinChannelVal()
+{
+  return _minChannelVal;
+}
+
+//--------------------------------------------------------------------------------------------------------
+//getMinFrameSpace()
+//-units of 0.5us
+//-get the min frame space you are permitting after the last channel in the PPM train, and before the first channel of the next frame in the PPM train 
+//-FOR MORE INFO SEE THE DESCRIPTION FOR "setMinFrameSpace"
+//--Ex: to get the minFrameSpace allowed, in us, call: getMinFrameSpace()/2; 
+//--------------------------------------------------------------------------------------------------------
+unsigned int eRCaGuy_PPM_Writer::getMinFrameSpace()
+{
+  return _minFrameSpace;
+}
+
+//--------------------------------------------------------------------------------------------------------
+//getChannelSpace
+//-get the pulse width of the spacer, in units of 0.5us, which separates channels in the PPM train. This width can vary slightly from brand to brand.
+//-Ex: to get the the channelSpace, in us, call: getChannelSpace()/2;
+//--------------------------------------------------------------------------------------------------------
+unsigned int eRCaGuy_PPM_Writer::getChannelSpace()
+{
+  return _channelSpace;
+}
+
+//--------------------------------------------------------------------------------------------------------
+//getFrameNumber 
+//-the frameNumber is the # of PPM frames that have *already been sent*
+//-it is incremented at the first edge of a new PPM frame, which marks the end of the previous PPM frame and the start of the 1st channel of the new PPM frame 
+//--------------------------------------------------------------------------------------------------------
+unsigned long eRCaGuy_PPM_Writer::getFrameNumber()
+{
+  unsigned long frameNumber;
+  //ensure atomic access to volatile variables
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+  {
+    frameNumber = _frameNumber;
+  }
+  return frameNumber;
+}
+
+//--------------------------------------------------------------------------------------------------------
+//getPPMPolarity
+//-read whether the PPMPolarity is set to PPM_WRITER_NORMAL (0) or PPM_WRITER_INVERTED (1).
+//-PPM_WRITER_NORMAL has a HIGH base-line signal, with channelSpace pulses that are LOW 
+//-PPM_WRITER_INVERTED has a LOW base-line signal, with channelSpace pulses that are HIGH  
+//--------------------------------------------------------------------------------------------------------
+boolean eRCaGuy_PPM_Writer::getPPMPolarity()
+{
+  return _PPMPolarity;
+}
+
+//--------------------------------------------------------------------------------------------------------
+//getCurrentChannel
+//-returns the PPM channel index for the channel which is *in the process of being* or *about to be* written to the PPM signal train! 
+//--------------------------------------------------------------------------------------------------------
+byte eRCaGuy_PPM_Writer::getCurrentChannel()
+{
+  return _currentChannel_i; //no need to force this operation to be atomic since it is a single byte; single byte variables automatically have atomic read/write access 
+}
+
+//--------------------------------------------------------------------------------------------------------
+//getTimeSincePPMFrameStart
+//-units of 0.5us 
+//-returns the time, in 0.5us counts, which will be the time elapsed at the start of the NEXT Compare Match interrupt, since the beginning of this PPM Frame
+//--------------------------------------------------------------------------------------------------------
+unsigned long eRCaGuy_PPM_Writer::getTimeSincePPMFrameStart()
+{
+  unsigned long timeSinceFrameStart; //0.5us
+  //ensure atomic access to volatile variables
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+  {
+    timeSinceFrameStart = _timeSinceFrameStart;
+  }
+  return timeSinceFrameStart;
+}
+
+
+
 
