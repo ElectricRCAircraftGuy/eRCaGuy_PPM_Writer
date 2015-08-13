@@ -1,7 +1,8 @@
 Readme Written: 2 July 2015
 last updated: 13 Aug. 2015
 
-#License: GPLv3 or later (ignore whatever the files say; it is GPLv3)
+##License: GPLv3 or later (ignore whatever the files say; it is GPLv3)  
+-I'll correct the license in the files later.
 
 **Instructions**  
 
