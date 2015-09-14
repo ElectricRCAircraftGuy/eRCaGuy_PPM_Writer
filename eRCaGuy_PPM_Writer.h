@@ -1,16 +1,20 @@
 /*
 eRCaGuy_PPM_Writer
 -an >=11-bit, jitter-free (hardware-based) RC PPM signal writer for the Arduino!
+
+AUTHOR:
 By Gabriel Staples
-http://www.ElectricRCAircraftGuy.com 
+Website: http://www.ElectricRCAircraftGuy.com
+My contact info is available by clicking the "Contact Me" tab at the top of my website.
 Library Written: 2 July 2015
-Library Last Updated: 5 July 2015
-Versioning System: Semantic Versioning 2.0.0 (http://semver.org/)
+Library Last Updated: 13 Sept 2015
+
+VERSIONING SYSTEM: 
+-Using Semantic Versioning 2.0.0 (http://semver.org/)
 Current Library Version 0.1.0
 
-History (newest on top):
-
-20150703 - First working version, V0.1.0, released
+HISTORY (newest on top):
+20150705 - First working version, V0.1.0, released
 */
 
 /*
@@ -18,23 +22,33 @@ History (newest on top):
   LICENSE & DISCLAIMER
   Copyright (C) 2015 Gabriel Staples.  All right reserved.
   
-  ------------------------------------------------------------------------------------------------
-  License: GNU Lesser General Public License Version 3 (LGPLv3) or later - https://www.gnu.org/licenses/lgpl.html
-  ------------------------------------------------------------------------------------------------
-
   This file is part of eRCaGuy_PPM_Writer.
   
+  I AM WILLING TO DUAL-LICENSE THIS SOFTWARE--EX: BY SELLING YOU A SEPARATE COMMERICAL LICENSE FOR
+  PRORPRIETARY USE. HOWEVER, UNLESS YOU HAVE PAID FOR AND RECEIVED A RECEIPT FOR AN ALTERNATE 
+  LICENSE AGREEMENT, FROM ME, THE COPYRIGHT OWNER, THIS SOFTWARE IS LICENSED UNDER THE GNU GPLV3
+  OR LATER, A COPY-LEFT LICENSE, AS FOLLOWS.
+  
+  NB: THE GNU GPLV3 LICENSE IS AN OPEN SOURCE LICENSE WHICH REQUIRES THAT ALL DERIVATIVE WORKS 
+  YOU CREATE (IE: *ANY AND ALL* CODE YOU HAVE LINKING TO, BORROWING FROM, OR OTHERWISE USING THIS CODE) 
+  ALSO BE RELEASED UNDER THE SAME LICENSE, AND BE OPEN-SOURCE FOR YOUR USERS AND/OR CUSTOMERS.
+  FOR ALL STIPULATIONS AND LEGAL DETAILS, REFER TO THE FULL LICENSE AGREEMENT.
+  
+  ------------------------------------------------------------------------------------------------
+  License: GNU General Public License Version 3 (GPLv3) - https://www.gnu.org/licenses/gpl.html
+  ------------------------------------------------------------------------------------------------
+  
   This program is free software: you can redistribute it and/or modify
-  it under the terms of the GNU Lesser General Public License as published by
+  it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
 
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU Lesser General Public License for more details.
+  GNU General Public License for more details.
 
-  You should have received a copy of the GNU Lesser General Public License
+  You should have received a copy of the GNU General Public License
   along with this program.  If not, see http://www.gnu.org/licenses/
 ===================================================================================================
 */
@@ -101,6 +115,8 @@ class eRCaGuy_PPM_Writer
   void begin(); //configures the timer and begins PPM output 
   void end(); //ends PPM output, but otherwise leaves the timer settings as-is
   boolean readChannelFlag(byte channel_i); //each channel has a flag (single bit) that is set true when the channel value is completed being written, and the flag is cleared once a true value is read via this function; this is useful if you want to have some sort of event-driven programming that does something immediately after a specific channel value is written; ex: "while(readChannelFlag(channel_i)==false){};" will stay in the while loop until that channel value is written to the PPM signal
+  
+  //ISR
   void compareMatchISR(); //interrupt service routine for output compare matches
   
   private:

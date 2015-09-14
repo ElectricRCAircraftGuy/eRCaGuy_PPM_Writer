@@ -2,8 +2,13 @@
 PPM_Writer_demo.ino
 By Gabriel Staples
 http://www.ElectricRCAircraftGuy.com 
+My contact info is available by clicking the "Contact Me" tab at the top of my website.
 Written: 3 July 2015
 Updated: 5 July 2015
+
+LICENSE: GNU GPLV3 or later (refer to .h file and attached license for details)
+
+-outputs PPM signal on Arduino pin 9
 */
 
 #include <eRCaGuy_PPM_Writer.h>

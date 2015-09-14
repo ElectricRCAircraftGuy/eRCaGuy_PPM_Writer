@@ -1,0 +1,66 @@
+#######################################
+# Syntax Coloring Map for Library "eRCaGuy_PPM_Writer"
+# Last updated: 13 Sept 2015
+#
+# Gabriel Staples
+# Website: http://www.ElectricRCAircraftGuy.com
+# My contact info is available by clicking the "Contact Me" tab at the top of my website.
+#
+# IMPORTANT: THERE CAN ONLY BE A *SINGLE TAB* (NOT A SPACE, NOT TWO TABS, ETC) after the 
+# Keyword and before the identifier (ex: KEYWORD2), in order for the Arduino IDE 
+# to properly do the syntax highlighting.
+# 
+# RECOMMENDED: Edit this file with regular Notepad, NOT Notepad++, since I have Notepad++ 
+# set up to replace tabs with spaces.
+#######################################
+  
+#######################################
+# Datatypes & Classes (KEYWORD1)
+#######################################
+eRCaGuy_PPM_Writer	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+setChannelVal	KEYWORD2
+setPPMPeriod	KEYWORD2
+setNumChannels	KEYWORD2
+setMaxChannelVal	KEYWORD2
+setMinChannelVal	KEYWORD2
+setMinFrameSpace	KEYWORD2
+setChannelSpace	KEYWORD2
+setFrameNumber	KEYWORD2
+setPPMPolarity	KEYWORD2
+
+getChannelVal	KEYWORD2
+getPPMPeriod	KEYWORD2
+getPPMFrequency	KEYWORD2
+getNumChannels	KEYWORD2
+getMaxChannelVal	KEYWORD2
+getMinChannelVal	KEYWORD2
+getMinFrameSpace	KEYWORD2
+getChannelSpace	KEYWORD2
+getFrameNumber	KEYWORD2
+getPPMPolarity	KEYWORD2
+getCurrentChannel	KEYWORD2
+getTimeSincePPMFrameStart	KEYWORD2
+
+begin	KEYWORD2
+end	KEYWORD2
+readChannelFlag	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+MAX_NUM_CHANNELS	LITERAL1
+MIN_NUM_CHANNELS	LITERAL1
+DEFAULT_NUM_CHANNELS	LITERAL1
+DEFAULT_MAX_CHANNEL_VAL	LITERAL1
+DEFAULT_MIN_CHANNEL_VAL	LITERAL1
+DEFAULT_CHANNEL_VAL	LITERAL1
+DEFAULT_MIN_FRAME_SPACE	LITERAL1
+DEFAULT_CHANNEL_SPACE	LITERAL1
+DEFAULT_FRAME_PERIOD	LITERAL1
+PPM_WRITER_NORMAL	LITERAL1
+PPM_WRITER_INVERTED	LITERAL1
+
