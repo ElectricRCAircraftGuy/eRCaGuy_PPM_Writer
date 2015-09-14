@@ -55,4 +55,4 @@ PPM writer. Connect to trainer port input on an RC Tx, through a 1k~10k resistor
 I hope you find this useful.  
 Sincerely,  
 Gabriel Staples  
-http://www.ElectricRCAircraftGuy.com/  
+http://www.ElectricRCAircraftGuy.com  
