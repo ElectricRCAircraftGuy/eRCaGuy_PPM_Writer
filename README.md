@@ -48,7 +48,7 @@ PPM writer. Connect to trainer port input on an RC Tx, through a 1k~10k resistor
 -The output from the Arduino is currently on pin D9.  
 
 ##Description  
-
+... 
 
 **For more information on this code see here:**  
 (no link yet)  
