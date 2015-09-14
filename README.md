@@ -2,6 +2,7 @@ Readme Written: 2 July 2015
 Readme Last Updated: 13 Sept. 2015  
 
 ##Code License  
+```
 /*
 ===================================================================================================
   LICENSE & DISCLAIMER
@@ -37,6 +38,7 @@ Readme Last Updated: 13 Sept. 2015
   along with this program.  If not, see http://www.gnu.org/licenses/
 ===================================================================================================
 */
+```
 
 ##Instructions  
 ...  
