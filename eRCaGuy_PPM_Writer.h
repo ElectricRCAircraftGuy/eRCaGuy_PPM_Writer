@@ -7,13 +7,22 @@ By Gabriel Staples
 Website: http://www.ElectricRCAircraftGuy.com
 My contact info is available by clicking the "Contact Me" tab at the top of my website.
 Library Written: 2 July 2015
-Library Last Updated: 13 Sept 2015
+Library Last Updated: 26 March 2016
 
 VERSIONING SYSTEM: 
 -Using Semantic Versioning 2.0.0 (http://semver.org/)
-Current Library Version 0.1.0
+
+Current Library Version 0.2.0
 
 HISTORY (newest on top):
+20160326 - Version 0.2.0 released; major additions to add in a 0.5us-resolution timestamp capability as a replacement for the micros() function which only has a 4us resolution; also added a few other things
+ -functions added include:
+ --getCount()
+ --getMicros()
+ --overflowInterruptOff();
+ --overflowInterruptOn();
+ --attachOverflowInterrupt();
+ --detachOverflowInterrupt();
 20150705 - First working version, V0.1.0, released
 */
 
@@ -71,7 +80,7 @@ const unsigned int DEFAULT_MIN_CHANNEL_VAL = 900*2; //0.5us
 const unsigned int DEFAULT_CHANNEL_VAL = 1500*2; //0.5us
 const unsigned int DEFAULT_MIN_FRAME_SPACE = max(DEFAULT_MAX_CHANNEL_VAL + 100*2,3000*2); //0.5us; min time gap between each frame, ie: between the end of the last channel and the start of the first channel
 const unsigned int DEFAULT_CHANNEL_SPACE = 400*2; //0.5us; the pulse that signifies the start of each new channel
-const unsigned long DEFAULT_FRAME_PERIOD = 22000*2; //0.5us; note: the default period for the Spektrum DX8, for instance, is 22ms, or a freq. of 45.45Hz
+const unsigned long DEFAULT_FRAME_PERIOD = 22000UL*2UL; //0.5us; note: the default period for the Spektrum DX8, for instance, is 22ms, or a freq. of 45.45Hz
 // const unsigned int MAX_OUTPUT_COMPARE_INCREMENT = 2^16; //make 2^16, or 65536, since Timer1 is a 16-bit timer/counter
 const boolean PPM_WRITER_NORMAL = 0; //base-line HIGH, channelSpace pulses are LOW
 const boolean PPM_WRITER_INVERTED = 1; //base-line LOW, channelSpace pulses are HIGH
@@ -116,8 +125,18 @@ class eRCaGuy_PPM_Writer
   void end(); //ends PPM output, but otherwise leaves the timer settings as-is
   boolean readChannelFlag(byte channel_i); //each channel has a flag (single bit) that is set true when the channel value is completed being written, and the flag is cleared once a true value is read via this function; this is useful if you want to have some sort of event-driven programming that does something immediately after a specific channel value is written; ex: "while(readChannelFlag(channel_i)==false){};" will stay in the while loop until that channel value is written to the PPM signal
   
-  //ISR
-  void compareMatchISR(); //interrupt service routine for output compare matches
+  //ISRs
+  inline void compareMatchISR(); //interrupt service routine for output compare matches
+  inline void overflowISR(); //ISR called when timer overflows; for 0.5us timestamps 
+  
+  //for 0.5us timestamps:
+  unsigned long getCount();
+  float getMicros();
+  void overflowInterruptOff();
+  void overflowInterruptOn();
+  //for custom userOverflowFunction
+  void attachOverflowInterrupt(void (*myFunc)());
+  void detachOverflowInterrupt();  
   
   private:
   
@@ -133,6 +152,12 @@ class eRCaGuy_PPM_Writer
   volatile unsigned int _channelSpace; //0.5us 
   volatile unsigned long _frameNumber; 
   volatile boolean _PPMPolarity;
+  //for 0.5us timestamps 
+  volatile unsigned long _overflowCount; //a counter of how many times an overflow has occurred on the timer/counter   
+  //for a custom userOverflowFunction
+  void (* volatile _p_userOverflowFunction)(void); //custom user function to attach to overflow ISR
+    //this is a volatile pointer to a function returning a type void, and accepting void as an input parameter; very confusing, I know. See here for help & details: 1) http://stackoverflow.com/questions/31898819/volatile-pointer-to-function-showing-compile-error-when-using-without-typedef-n and 2) http://www.barrgroup.com/Embedded-Systems/How-To/C-Volatile-Keyword
+  volatile bool _userOverflowFuncOn; 
   //non-volatile:
   unsigned int _maxChannelVal; //0.5us
   unsigned int _minChannelVal; //0.5us
