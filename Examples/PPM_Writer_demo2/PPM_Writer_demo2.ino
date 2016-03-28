@@ -39,6 +39,12 @@ void setup()
   Serial.print(F("PPMFreq(Hz) = ")); Serial.println(PPMWriter.getPPMFrequency());
   
   PPMWriter.begin(); //start the PPM train; default will be 1500us for all channels, 22ms for each PPM frame (I'm copying the Spektrum DX8 signal)
+  
+  
+  PPMWriter.overflowInterruptOff();
+  PPMWriter.overflowInterruptOn();
+  PPMWriter.attachOverflowInterrupt(blinkLED);
+  // PPMWriter.detachOverflowInterrupt();
 }
 
 void loop()
@@ -74,6 +80,14 @@ void loop()
       // ch_i = 0; //reset 
   }
 
+}
+
+void blinkLED()
+{
+  pinMode(13,OUTPUT);
+  static bool led_state = LOW;
+  led_state = !led_state; //toggle
+  digitalWrite(13,led_state);
 }
 
 

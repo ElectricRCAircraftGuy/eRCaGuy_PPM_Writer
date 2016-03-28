@@ -79,7 +79,7 @@ const unsigned int DEFAULT_MAX_CHANNEL_VAL = 2100*2; //0.5us units
 const unsigned int DEFAULT_MIN_CHANNEL_VAL = 900*2; //0.5us
 const unsigned int DEFAULT_CHANNEL_VAL = 1500*2; //0.5us
 const unsigned int DEFAULT_MIN_FRAME_SPACE = max(DEFAULT_MAX_CHANNEL_VAL + 100*2,3000*2); //0.5us; min time gap between each frame, ie: between the end of the last channel and the start of the first channel
-const unsigned int DEFAULT_CHANNEL_SPACE = 400*2; //0.5us; the pulse that signifies the start of each new channel
+const unsigned int DEFAULT_CHANNEL_SPACE = 400*2; //0.5us; the short pulse whose first edge signifies the start of each new channel
 const unsigned long DEFAULT_FRAME_PERIOD = 22000UL*2UL; //0.5us; note: the default period for the Spektrum DX8, for instance, is 22ms, or a freq. of 45.45Hz
 // const unsigned int MAX_OUTPUT_COMPARE_INCREMENT = 2^16; //make 2^16, or 65536, since Timer1 is a 16-bit timer/counter
 const boolean PPM_WRITER_NORMAL = 0; //base-line HIGH, channelSpace pulses are LOW
@@ -102,7 +102,7 @@ class eRCaGuy_PPM_Writer
   void setMinFrameSpace(unsigned int minFrameSpace); //0.5us
   void setChannelSpace(unsigned int channelSpace); //0.5us
   void setFrameNumber(unsigned long frameNum); //manually set the frameNumber to a specific value; ex: 0, to reset it
-  void setPPMPolarity(boolean polarity);
+  void setPPMPolarity(boolean polarity); //set PPM_WRITER_NORMAL or PPM_WRITER_INVERTED
   
   //"get" methods 
   //primary methods
