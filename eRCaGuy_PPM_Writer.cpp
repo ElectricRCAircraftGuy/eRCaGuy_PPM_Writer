@@ -58,6 +58,9 @@ Pin Mapping: https://www.arduino.cc/en/Hacking/PinMapping168
 #include "eRCaGuy_PPM_Writer.h"
 #include <util/atomic.h> //http://www.nongnu.org/avr-libc/user-manual/group__util__atomic.html
 
+//NOTE/TODO: ALLOW ONE TO CHOOSE WHICH TIMER YOU'D LIKE TO USE FOR THIS LIBRARY IN THE "eRCaGuy_TimerCounterTimers.h" file
+#include "eRCaGuy_TimerCounterTimers.h"
+
 //macros
 #define readPinA() (PINB & _BV(1)) //Arduino pin 9
 #define togglePinA() (TCCR1C = _BV(FOC1A)) //see datasheet pg. 135 & 132; force OC1A pin (Arduino D9) to toggle; datasheet pg. 132: setting one or both of the COM1A1:0 bits to 1 overrides the normal port functionality of the I/O pin it is connected to, so this is how you must toggle the pin; digitalWrite(9,HIGH/LOW) on pin 9 will NOT work anymore on this pin; note, however, that *reading* the pin port directly, or calling digitalRead(9) DOES still work!
@@ -77,7 +80,10 @@ eRCaGuy_PPM_Writer PPMWriter; //preinstantiation of object
 //========================================================================================================
 //ISRs
 //========================================================================================================
+
+//--------------------------------------------------------------------------------------------------------
 //Timer 1 Compare Match A interrupt
+//--------------------------------------------------------------------------------------------------------
 ISR(TIMER1_COMPA_vect)
 {
   // writePin2HIGH; //FOR MEASURING THE ISR PROCESSING TIME. ANSWER: <= ~6us per ISR interrupt
@@ -85,11 +91,22 @@ ISR(TIMER1_COMPA_vect)
   // writePin2LOW;
 }
 
-//Here is where the magic happens (ie: the actual writing of the PPM signal)
-void eRCaGuy_PPM_Writer::compareMatchISR()
+//--------------------------------------------------------------------------------------------------------
+//Timer 1 Overflow Interrupt
+//--------------------------------------------------------------------------------------------------------
+ISR(TIMER1_OVF_vect) //Timer1's counter has overflowed 
+{
+  PPMWriter.overflowISR();
+}
+
+//--------------------------------------------------------------------------------------------------------
+//compareMatchISR
+//-Here is where the magic happens (ie: the actual writing of the PPM signal)
+//--------------------------------------------------------------------------------------------------------
+inline void eRCaGuy_PPM_Writer::compareMatchISR()
 {
   //local variables
-  unsigned int incrementVal; //units of 0.5us
+  long incrementVal; //units of 0.5us; make long too allow for (and later be able to handle) the rare case of negative values, which would occur if someone tries to set the PPM period too short 
   
   if (_currentState==FIRST_EDGE)
   {
@@ -134,6 +151,18 @@ void eRCaGuy_PPM_Writer::compareMatchISR()
   _timeSinceFrameStart += incrementVal; //0.5us; this will be the time elapsed at the start of the NEXT Compare Match A interrupt
 }
 
+//--------------------------------------------------------------------------------------------------------
+//overflowISR
+//-this is used to generate a 0.5us timestamp capability, to get better resolution than what micros() can provide
+//--(micros only has a 4us resolution)
+//--------------------------------------------------------------------------------------------------------
+inline void eRCaGuy_PPM_Writer::overflowISR()
+{
+  _overflowCount++;
+  if (_userOverflowFuncOn)
+    _p_userOverflowFunction(); //call the user-attached function
+}
+
 //========================================================================================================
 //eRCaGuy_PPM_Writer CLASS METHODS
 //========================================================================================================
@@ -157,6 +186,8 @@ eRCaGuy_PPM_Writer::eRCaGuy_PPM_Writer()
   _channelSpace = DEFAULT_CHANNEL_SPACE; //0.5us
   _frameNumber = 0;
   _PPMPolarity = PPM_WRITER_NORMAL; 
+  _overflowCount = 0; //for 0.5us timestamps 
+  _userOverflowFuncOn = false;
 }
 
 //--------------------------------------------------------------------------------------------------------
@@ -184,10 +215,98 @@ void eRCaGuy_PPM_Writer::begin()
   
   OCR1A = TCNT1 + 100; //set to interrupt (to begin PPM signal generation) 50us (100 counts) from now
   
-  //enable Output Compare A interrupt (TIMSK1, datasheet pg. 136)
-  TIMSK1 = _BV(OCIE1A);  
+  TIMSK1 = _BV(OCIE1A); //enable Output Compare A interrupt (TIMSK1, datasheet pg. 136)
+  overflowInterruptOn();
   
   ensurePPMPolarity();
+}
+
+//--------------------------------------------------------------------------------------------------------
+//getCount
+//-get the total 32-bit (unsigned long) count on the timer, ***in units of COUNTS, not microseconds***
+//--ex: with prescaler = 8, you have 0.5us/count for a 16Mhz Arduino, so you divide counts by 2 to get us
+//-Note that the time returned WILL update even in Interrupt Service Routines (ISRs), so if you call this function in an ISR, and you want the time to be as close as possible to a certain event that occurred which called the ISR you are in, make sure to call getCount() first thing when you enter the ISR.
+//-Also, note that calling getCount() is faster than calling getMicros() and is therefore the preferable way to measure a time interval.
+//--For example: call getCount() at the beginning of some event, then at the end. Take the difference and divide it by 2 (assuming 16Mhz Arduino, prescaler is 8) to get the time interval in microseconds.
+//--------------------------------------------------------------------------------------------------------
+unsigned long eRCaGuy_PPM_Writer::getCount()
+{
+  unsigned long totalCount; //units of COUNTS
+  uint8_t SREG_old = SREG; //back up the AVR Status Register; see example in datasheet on pg. 14, as well as Nick Gammon's "Interrupts" article - http://www.gammon.com.au/forum/?id=11488
+  noInterrupts(); //prepare for critical section of code
+  {
+    unsigned int TCNTn_save = TCNTn; //grab the counter value from timer
+    bool overflowFlag = bitRead(TIFRn,0); //grab the timer overflow flag value; see datasheet pg. 160, for ex.
+    if (overflowFlag) //if the overflow flag is set
+    {
+      TCNTn_save = TCNTn; //update variable just saved since the overflow flag could have just tripped between previously saving the TCNTn value and reading bit 0 of TIFRn. If this is the case, TCNTn might have just changed from 255 to 0 (for an 8-bit timer), and so we need to grab the new value of TCNTn to prevent an error of up to 127.5us in any time obtained using this counter. (Note: 255 counts / 2 counts/us = 127.5us). 
+      //Note: this line of code DID in fact fix the error just described, in which I periodically saw an error of ~127.5us in some values read in by some PWM read code I wrote.
+      _overflowCount++; //force the overflow count to increment
+      TIFRn |= _BV(0); //reset the Timer overflow flag since we just manually incremented above; ex: see datasheet pg. 160; this prevents execution of the timer's overflow ISR
+    }
+    totalCount = _overflowCount*TC_RESOLUTION + TCNTn_save;
+  }
+  SREG = SREG_old; //restore interrupt-enable state
+  return totalCount;
+}
+
+//--------------------------------------------------------------------------------------------------------
+//getMicros 
+//-returns the 32-bit timer time, with full resolution, as a float. 
+//--Ex: for a 16Mhz Arduino, with prescaler of 8, the resolution is 0.5us per count; with prescaler of 1, the resolution is 0.0625us per count. Both of these are better than the default Arduino micros() resolution of 4us 
+//-this function is slower than calling getCount() and therefore is not the preferred way of getting time. It is better to get the time by calling getCount() then dividing the value by the appropriate divisor to convert to us.
+//--------------------------------------------------------------------------------------------------------
+float eRCaGuy_PPM_Writer::getMicros()
+{
+  return (float)getCount()/2; //returns a time stamp in us 
+}
+
+//--------------------------------------------------------------------------------------------------------
+//overflowInterruptOff 
+//-turns off the timer's overflow interrupt so that you no longer interrupt your code (every 128us for an 8-bit timer with prescaler of 8) in order to increment your overflow counter.
+//-This may be desirable when you are no longer needing timestamps and want your main code or other interrupts to run more jitter-free, but you don't want to call end() in order to change all of the timer's settings back to default.
+//-Assuming 16Mhz Arduino, 8-bit timer, and prescaler of 8 (ie: 0.5us/count), turning off the overflow interrupt will give you savings of approximately 4~5us every 128us. This is a CPU processing time savings of ~4%.
+//--Source: Nick Gammon; "Interrupts" article; "How long does it take to execute an ISR?" section, found here: http://www.gammon.com.au/forum/?id=11488
+//-Note: If you disable the timer overflow interrupt but still call getCount() or getMicros() at least every 128us (or whatever your interrupt period is given your clock speed, timer size [8 or 16-bit], and prescaler), you will notice no difference in the counter, since calling getCount() or getMicros() also checks the interrupt flag and increments the overflow counter automatically. You have to wait > 128us between calls before you see any missed overflow counts.
+//--------------------------------------------------------------------------------------------------------
+void eRCaGuy_PPM_Writer::overflowInterruptOff()
+{
+  TIMSKn &= ~_BV(0);
+}
+
+//--------------------------------------------------------------------------------------------------------
+//overflowInterruptOn 
+//-turns the timer's overflow interrupt back on, so that the overflow counter will start to increment again
+//-see "overflowInterruptOff" for details 
+//--------------------------------------------------------------------------------------------------------
+void eRCaGuy_PPM_Writer::overflowInterruptOn()
+{
+  TIMSKn |= _BV(0);
+}
+
+//--------------------------------------------------------------------------------------------------------
+//attachOverflowInterrupt(myFunction)
+//-this allows you to attach your own custom function that you want to be called every overflow interrupt. Very useful for recurring events, for example, but you'll have to write some more smarts into your function if you want specific timing.
+//-this will also be very useful for my upcoming SoftwarePWM library, for example, which will allow software PWMing (analogWrite) on EVERY Arduino pin!
+//--------------------------------------------------------------------------------------------------------
+void eRCaGuy_PPM_Writer::attachOverflowInterrupt(void (*myFunc)())
+{
+  //ensure atomic access
+  uint8_t SREGbak = SREG;
+  noInterrupts();
+    _userOverflowFuncOn = true;
+    _p_userOverflowFunction = myFunc; //attach function
+  SREG = SREGbak; //restore interrupt state 
+}
+
+//--------------------------------------------------------------------------------------------------------
+//detachOverflowInterrupt
+//-detach (stop) your attached function
+//--ie: prevent it from being called
+//--------------------------------------------------------------------------------------------------------
+void eRCaGuy_PPM_Writer::detachOverflowInterrupt()
+{
+  _userOverflowFuncOn = false; //this is already atomic since it is a single byte; no atomic guards necessary
 }
 
 //--------------------------------------------------------------------------------------------------------
@@ -278,6 +397,7 @@ void eRCaGuy_PPM_Writer::setChannelVal(byte channel_i, unsigned int val)
 //setPPMPeriod
 //-control the PPM output frequency by setting the desired PPM train frame period directly 
 //-units are 0.5us
+//-currently, the longest value you can set is 2^16 - 1, or 65535, since the longest timer/counter is only 16-bits, and I'm not taking into account roll-overs beyond the length of the timer/counter, *yet*. ***********TODO: do take them into account so I can start using 8-bit timer/counters for this library too.***************
 //-ex: setPPMPeriod(20000*2) sets a pd of 20000us (40000 0.5us counts), which results in a PPM freq. of 1/20ms=50Hz
 //-WARNING: if your channel values are all at their max values, the local variable "_minFrameSpace" acts as a safety feature to ensure the frame space after the last channel is longer than the longest channel. This is necessary because that is how a device *reading* a PPM signal finds the first frame: it knows that the *longest* frame is the frame space, and that the first channel comes after that. In the event that you set the PPM period too short, or have too many channels, with all of them maxed out, the PPM writer will force the frame space after the last channel to be at least as long as what is set in the local variable "_minFrameSpace." In this event, the PPM period will be lengthened for that frame, and the desired PPM frequency will not be reached.
 //--ex: assume 9 channels, max channel value of 2100us, PPM period set to 20ms; if all channels are simultaneously maxed out it takes 2100x9 = 18.9ms just to write the channels. To keep the 20ms PPM period, the frameSpace would have to be 20-18.9 = 1.1ms. However, THIS WILL BREAK THE SIGNAL AND PREVENT THE DEVICE READING THE PPM SIGNAL FROM DETERMINING WHERE THE START OF THE PPM FRAME IS. Therefore, the _minFrameSpace (default 3ms last I set it) will be used instead of 1.1ms. This makes the PPM frame 18.9ms + 3ms = 21.9ms (45.7Hz) instead of the desired 20ms (50Hz). Depending on your settings, since this PPM writer is totally user-customizable, you may get even more drastic results. Ex: if you were trying to fit 12 full-length channels in a 20ms PPM frame....you do the math.
