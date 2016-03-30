@@ -75,16 +75,27 @@ Pin Mapping: https://www.arduino.cc/en/Hacking/PinMapping168
 #define writePin2HIGH (PORTD |= _BV(2))
 #define writePin2LOW (PORTD &= ~_BV(2)) */
 
+//For locking ISRs to prevent re-entrant execution when nested interrupts are enabled 
+//-ex: to prevent re-entrant execution of this ISR even though ***nested interrupts are enabled!***
+//-"return" is to exit the function if the ISR is locked 
+#define functionLock()              \
+  static bool ISR_locked = false;   \
+  if (ISR_locked==true)             \
+    return;                         \
+  ISR_locked = true;
+#define functionUnlock() ISR_locked = false;
+
 eRCaGuy_PPM_Writer PPMWriter; //preinstantiation of object
 
 //========================================================================================================
 //ISRs
+//-NB: ISR_NOBLOCK allows *nested interrupts* by *enabling* interrupts within the ISR! See here: http://www.nongnu.org/avr-libc/user-manual/group__avr__interrupts.html#ga5fc50a0507a58e16aca4c70345ddac6a
 //========================================================================================================
 
 //--------------------------------------------------------------------------------------------------------
 //Timer 1 Compare Match A interrupt
 //--------------------------------------------------------------------------------------------------------
-ISR(TIMER1_COMPA_vect)
+ISR(TIMER1_COMPA_vect,ISR_NOBLOCK)
 {
   // writePin2HIGH; //FOR MEASURING THE ISR PROCESSING TIME. ANSWER: <= ~6us per ISR interrupt
   PPMWriter.compareMatchISR();
@@ -94,7 +105,7 @@ ISR(TIMER1_COMPA_vect)
 //--------------------------------------------------------------------------------------------------------
 //Timer 1 Overflow Interrupt
 //--------------------------------------------------------------------------------------------------------
-ISR(TIMER1_OVF_vect) //Timer1's counter has overflowed 
+ISR(TIMER1_OVF_vect,ISR_BLOCK) //Timer1's counter has overflowed 
 {
   PPMWriter.overflowISR();
 }
@@ -102,10 +113,13 @@ ISR(TIMER1_OVF_vect) //Timer1's counter has overflowed
 //--------------------------------------------------------------------------------------------------------
 //compareMatchISR
 //-Here is where the magic happens (ie: the actual writing of the PPM signal)
+//-NESTED INTERRUPTS ENABLED HERE 
 //--------------------------------------------------------------------------------------------------------
 inline void eRCaGuy_PPM_Writer::compareMatchISR()
 {
-  //local variables
+  functionLock(); //prevent re-entrant execution of this function even though ***nested interrupts*** are enabled 
+  
+  //local variables 
   long incrementVal; //units of 0.5us; make long too allow for (and later be able to handle) the rare case of negative values, which would occur if someone tries to set the PPM period too short 
   
   if (_currentState==FIRST_EDGE)
@@ -149,6 +163,8 @@ inline void eRCaGuy_PPM_Writer::compareMatchISR()
   //set up NEXT signal toggle on the OC1A pin
   OCR1A += incrementVal; 
   _timeSinceFrameStart += incrementVal; //0.5us; this will be the time elapsed at the start of the NEXT Compare Match A interrupt
+  
+  functionUnlock();
 }
 
 //--------------------------------------------------------------------------------------------------------
@@ -158,9 +174,13 @@ inline void eRCaGuy_PPM_Writer::compareMatchISR()
 //--------------------------------------------------------------------------------------------------------
 inline void eRCaGuy_PPM_Writer::overflowISR()
 {
+  // functionLock(); //prevent re-entrant execution of this function even though ***nested interrupts*** are enabled 
+  
   _overflowCount++;
   if (_userOverflowFuncOn)
     _p_userOverflowFunction(); //call the user-attached function
+  
+  // functionUnlock();
 }
 
 //========================================================================================================
