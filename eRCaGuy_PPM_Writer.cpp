@@ -74,8 +74,11 @@ Pin Mapping: https://www.arduino.cc/en/Hacking/PinMapping168
 /* //FOR DEBUGGING/CODE SPEED MEASURING WITH OSCILLOSCOPE
 #define writePin2HIGH (PORTD |= _BV(2))
 #define writePin2LOW (PORTD &= ~_BV(2)) */
+#define PROFILE_PINA3_HIGH  PORTC |= _BV(3) //write Arduino pin A3 HIGH
+#define PROFILE_PINA3_LOW   PORTC &= ~_BV(3) //write Arduino pin A3 LOW
 
-//For locking ISRs to prevent re-entrant execution when nested interrupts are enabled 
+//UPDATE 20160331-1738 HRS: THE BELOW IS A REALLY BAD IDEA AND COMPLETELY GLITCHES THE PPM OUTPUT LIKE CRAZY ON OCCASION, SO JUST GET RID OF IT ALTOGETHER. NO MORE NESTED INTERRUPTS!--unless you want to guarantee a crashed airplane/multirotor due to this stinking code :) ~GS.///////////////////////
+/* //For locking ISRs to prevent re-entrant execution when nested interrupts are enabled 
 //-ex: to prevent re-entrant execution of this ISR even though ***nested interrupts are enabled!***
 //-"return" is to exit the function if the ISR is locked 
 #define functionLock()              \
@@ -83,19 +86,21 @@ Pin Mapping: https://www.arduino.cc/en/Hacking/PinMapping168
   if (ISR_locked==true)             \
     return;                         \
   ISR_locked = true;
-#define functionUnlock() ISR_locked = false;
+#define functionUnlock() ISR_locked = false; */
 
 eRCaGuy_PPM_Writer PPMWriter; //preinstantiation of object
 
 //========================================================================================================
 //ISRs
-//-NB: ISR_NOBLOCK allows *nested interrupts* by *enabling* interrupts within the ISR! See here: http://www.nongnu.org/avr-libc/user-manual/group__avr__interrupts.html#ga5fc50a0507a58e16aca4c70345ddac6a
+//-NB: ISR_BLOCK is the AVRLibc ISR default, and ISR_NOBLOCK allows *nested interrupts* by *enabling* interrupts within the ISR! See here: http://www.nongnu.org/avr-libc/user-manual/group__avr__interrupts.html#ga5fc50a0507a58e16aca4c70345ddac6a
 //========================================================================================================
 
 //--------------------------------------------------------------------------------------------------------
 //Timer 1 Compare Match A interrupt
+//-NB: ISR_NOBLOCK allows neste interrupts within this ISR 
 //--------------------------------------------------------------------------------------------------------
-ISR(TIMER1_COMPA_vect,ISR_NOBLOCK)
+// ISR(TIMER1_COMPA_vect,ISR_NOBLOCK)
+ISR(TIMER1_COMPA_vect,ISR_BLOCK)
 {
   // writePin2HIGH; //FOR MEASURING THE ISR PROCESSING TIME. ANSWER: <= ~6us per ISR interrupt
   PPMWriter.compareMatchISR();
@@ -117,7 +122,8 @@ ISR(TIMER1_OVF_vect,ISR_BLOCK) //Timer1's counter has overflowed
 //--------------------------------------------------------------------------------------------------------
 inline void eRCaGuy_PPM_Writer::compareMatchISR()
 {
-  functionLock(); //prevent re-entrant execution of this function even though ***nested interrupts*** are enabled 
+  // PROFILE_PINA3_HIGH; /////////////FOR PROFILING WITH OSCILLOSCOPE; result: ~5us with functionLock uncommented and nested interrupts allowed, and ~the same (~5us) with functionLock commented out and nested interrupts NOT allowed 
+  // functionLock(); //prevent re-entrant execution of this function even though ***nested interrupts*** are enabled 
   
   //local variables 
   long incrementVal; //units of 0.5us; make long too allow for (and later be able to handle) the rare case of negative values, which would occur if someone tries to set the PPM period too short 
@@ -128,7 +134,7 @@ inline void eRCaGuy_PPM_Writer::compareMatchISR()
     byte lastChannel_i = _currentChannel_i - 1;
     if (_currentChannel_i==0)
     {
-      lastChannel_i = _numChannels; //ex: for 8 channels, lastChannel_i is now equal to 8. Since the 8 channels take bits 0 to 7 in the _channelFlags variable, bit 8 corresponds to the FrameSpace "channel" which occured after channel 8
+      lastChannel_i = _numChannels; //ex: for 8 channels, lastChannel_i is now equal to 8. Since the 8 channels take bits 0 to 7 in the _channelFlags variable, bit 8 corresponds to the FrameSpace "channel" which occurred after channel 8
       
       //if we are on the FIRST_EDGE *AND* the first channel, then it means we are at the *VERY START* of a new PPM frame, so the last PPM frame has just completed!
       _timeSinceFrameStart = 0; //0.5us; reset
@@ -164,7 +170,8 @@ inline void eRCaGuy_PPM_Writer::compareMatchISR()
   OCR1A += incrementVal; 
   _timeSinceFrameStart += incrementVal; //0.5us; this will be the time elapsed at the start of the NEXT Compare Match A interrupt
   
-  functionUnlock();
+  // functionUnlock();
+  // PROFILE_PINA3_LOW; /////////////FOR PROFILING WITH OSCILLOSCOPE
 }
 
 //--------------------------------------------------------------------------------------------------------
@@ -377,7 +384,8 @@ boolean eRCaGuy_PPM_Writer::readChannelFlag(byte channel_i)
 {
   bool flagVal;
   //ensure a valid channel
-  channel_i = constrain(channel_i,0,_numChannels - 1);
+  // channel_i = constrain(channel_i,0,_numChannels - 1);
+  channel_i = min(channel_i,_numChannels - 1); //same as above, since 0 lower constraint on unsigned value is meaningless
   
   //ensure atomic access to volatile variables
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
@@ -404,7 +412,8 @@ void eRCaGuy_PPM_Writer::setChannelVal(byte channel_i, unsigned int val)
 {
   //constrain within valid bounds
   val = constrain(val,_minChannelVal,_maxChannelVal);
-  channel_i = constrain(channel_i,0,_numChannels - 1);
+  // channel_i = constrain(channel_i,0,_numChannels - 1);
+  channel_i = min(channel_i,_numChannels - 1); //same as above, since 0 lower constraint on unsigned value is meaningless
   
   //ensure atomic access to volatile variables
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
@@ -544,7 +553,8 @@ void eRCaGuy_PPM_Writer::setPPMPolarity(boolean PPMPolarity)
 unsigned int eRCaGuy_PPM_Writer::getChannelVal(byte channel_i)
 {
   //Note: forced atomic access NOT required on _numChannels and _channels below since they are only being READ here, AND since they are NOT ever written to (modified) in an ISR 
-  channel_i = constrain(channel_i,0,_numChannels - 1);   
+  // channel_i = constrain(channel_i,0,_numChannels - 1);   
+  channel_i = min(channel_i,_numChannels - 1); //same as above, since 0 lower constraint on unsigned value is meaningless
   return _channels[channel_i];
 }
 
