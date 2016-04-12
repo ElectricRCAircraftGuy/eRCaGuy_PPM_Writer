@@ -7,7 +7,7 @@ By Gabriel Staples
 Website: http://www.ElectricRCAircraftGuy.com
 My contact info is available by clicking the "Contact Me" tab at the top of my website.
 Library Written: 2 July 2015
-Library Last Updated: 26 March 2016
+Library Last Updated: 12 April 2016
 
 VERSIONING SYSTEM: 
 -Using Semantic Versioning 2.0.0 (http://semver.org/)
@@ -15,6 +15,7 @@ VERSIONING SYSTEM:
 Current Library Version 0.2.0
 
 HISTORY (newest on top):
+20160412 - Version 0.2.1 - bug fixed! Previously, in functions such as setChannelVal(channel_i, val), I would *constrain* the user input for the channel index, channel_i, and set the val on the constrained channel_i. This is a BAD idea! For example, if the user tries to set Ch8 to something, but they have set only 7 channels via the setNumChannels function, previously it would set their commanded value (that they intended for Ch8) on Ch7 instead! Bad bad bad! Very confusing to the user. Instead, if the user tries to act on a channel that doesn't exist, simply ignore their command. This way, they are more likely to find their mistake, rather than reading and writing from and to channels they don't know they are reading and writing from and to. Bug fixed. No more of this silliness. :)
 20160326 - Version 0.2.0 released; major additions to add in a 0.5us-resolution timestamp capability as a replacement for the micros() function which only has a 4us resolution; also added a few other things
  -functions added include:
  --getCount()
