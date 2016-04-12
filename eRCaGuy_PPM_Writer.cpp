@@ -118,7 +118,7 @@ ISR(TIMER1_OVF_vect,ISR_BLOCK) //Timer1's counter has overflowed
 //--------------------------------------------------------------------------------------------------------
 //compareMatchISR
 //-Here is where the magic happens (ie: the actual writing of the PPM signal)
-//-NESTED INTERRUPTS ENABLED HERE 
+//-NESTED INTERRUPTS ENABLED HERE <--CANCEL THAT; IT'S A BAD IDEA; see above: if ISR_BLOCK is in use, it does NOT allow nested interrupts 
 //--------------------------------------------------------------------------------------------------------
 inline void eRCaGuy_PPM_Writer::compareMatchISR()
 {
@@ -382,17 +382,17 @@ void eRCaGuy_PPM_Writer::end()
 //--------------------------------------------------------------------------------------------------------
 boolean eRCaGuy_PPM_Writer::readChannelFlag(byte channel_i)
 {
-  bool flagVal;
-  //ensure a valid channel
-  // channel_i = constrain(channel_i,0,_numChannels - 1);
-  channel_i = min(channel_i,_numChannels - 1); //same as above, since 0 lower constraint on unsigned value is meaningless
-  
-  //ensure atomic access to volatile variables
-  ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+  bool flagVal = false;
+  //only perform this action on a valid channel
+  if (channel_i < _numChannels)
   {
-    flagVal = bitRead(_channelFlags,channel_i);
-    if (flagVal==true) //if read true, reset the flag
-      bitClear(_channelFlags,channel_i);
+    //ensure atomic access to volatile variables
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+    {
+      flagVal = bitRead(_channelFlags,channel_i);
+      if (flagVal==true) //if read true, reset the flag
+        bitClear(_channelFlags,channel_i);
+    }
   }
   return flagVal;
 }
@@ -410,15 +410,17 @@ boolean eRCaGuy_PPM_Writer::readChannelFlag(byte channel_i)
 //--------------------------------------------------------------------------------------------------------
 void eRCaGuy_PPM_Writer::setChannelVal(byte channel_i, unsigned int val)
 {
-  //constrain within valid bounds
-  val = constrain(val,_minChannelVal,_maxChannelVal);
-  // channel_i = constrain(channel_i,0,_numChannels - 1);
-  channel_i = min(channel_i,_numChannels - 1); //same as above, since 0 lower constraint on unsigned value is meaningless
-  
-  //ensure atomic access to volatile variables
-  ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+  //only perform this action on a valid channel
+  if (channel_i < _numChannels)
   {
-    _channels[channel_i] = val;
+    //constrain within valid bounds
+    val = constrain(val,_minChannelVal,_maxChannelVal);
+    
+    //ensure atomic access to volatile variables
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+    {
+      _channels[channel_i] = val;
+    }
   }
 }
 
@@ -553,9 +555,14 @@ void eRCaGuy_PPM_Writer::setPPMPolarity(boolean PPMPolarity)
 unsigned int eRCaGuy_PPM_Writer::getChannelVal(byte channel_i)
 {
   //Note: forced atomic access NOT required on _numChannels and _channels below since they are only being READ here, AND since they are NOT ever written to (modified) in an ISR 
-  // channel_i = constrain(channel_i,0,_numChannels - 1);   
-  channel_i = min(channel_i,_numChannels - 1); //same as above, since 0 lower constraint on unsigned value is meaningless
-  return _channels[channel_i];
+  
+  //only perform this action on a valid channel
+  if (channel_i < _numChannels)
+  {
+    return _channels[channel_i];
+  }
+  else //not a valid channel 
+    return 0;
 }
 
 //--------------------------------------------------------------------------------------------------------
