@@ -1,7 +1,7 @@
 Readme Written: 2 July 2015  
 Readme Last Updated: 13 Sept. 2015  
 
-##Code License  
+## Code License  
 ```
 /*
 ===================================================================================================
@@ -40,14 +40,14 @@ Readme Last Updated: 13 Sept. 2015
 */
 ```
 
-##Instructions  
+## Instructions  
 ...  
 
-##Basic Summary  
+## Basic Summary  
 PPM writer. Connect to trainer port input on an RC Tx, through a 1k~10k resistor for protection to the Arduino and Radio.  
 -The output from the Arduino is currently on pin D9.  
 
-##Description  
+## Description  
 ...  
 
 **For more information on this code see here:**  
