@@ -41,11 +41,10 @@ Readme Last Updated: 16 July 2017
 ```
 
 ## Instructions  
-...  
+Connect the PPM output signal (currently on Arduino pin D9) to the trainer port input on an RC Tx, through a 1k~10k resistor for protection to the Arduino and Radio.  
 
 ## Basic Summary  
-PPM writer. Connect to trainer port input on an RC Tx, through a 1k~10k resistor for protection to the Arduino and Radio.  
--The output from the Arduino is currently on pin D9.  
+This is a very thorough and versatile RC PPM generator program to generate a Pulse Position Modulation signal for RC use. Since it utilizes sophisticated hardware regiser techniques, the output PPM signal is high-fidelity and jitter-free. 
 
 ## Description  
  * This is a C++ class-based implementation of a low-level driver/communication protocol used widely in commercial Radio Control (RC) equipment, known as Pulse Position Modulation (PPM). PPM is basically just a multiplexed version of a bunch of servo PWM (Pulse Width Modulation) signals all on one line, with special timing pulses between channels to signify where one ends and another begins. If you don't know, servo PWM signals are semi-analog-like signals where the width of the pulse, in microseconds, *is* the data, or servo command. A servo PWM pulse width of ~1000us corresponds to full servo deflection in one direction, while ~2000us corresponds to full servo deflection in the other direction, and ~1500us is the servo center position. In PPM, the pulse width concept is the same, but how it is measured and pulsed out is slightly different. Refer to the "PPM Signal Drawing" image I've included in the repository for a real example I drew from analysing commercial RC equipment on an oscilloscope. 
