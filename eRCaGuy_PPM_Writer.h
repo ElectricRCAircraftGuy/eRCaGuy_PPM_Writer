@@ -12,7 +12,7 @@ Library Last Updated: 12 April 2016
 VERSIONING SYSTEM: 
 -Using Semantic Versioning 2.0.0 (http://semver.org/)
 
-Current Library Version 0.2.0
+Current Library Version: see History section below.
 
 HISTORY (newest on top):
 20160412 - Version 0.2.1 - User-error-related bug fixed! Previously, in functions such as setChannelVal(channel_i, val), I would *constrain* the user input for the channel index, channel_i, and set the val on the constrained channel_i. This is a BAD idea! For example, if the user tries to set Ch8 to something, but they have set only 7 channels via the setNumChannels function, previously it would set their commanded value (that they intended for Ch8) on Ch7 instead! Bad bad bad! Very confusing to the user. Instead, if the user tries to act on a channel that doesn't exist, simply ignore their command. This way, they are more likely to find their mistake, rather than reading and writing from and to channels they don't know they are reading and writing from and to. Bug fixed. No more of this silliness. :)
