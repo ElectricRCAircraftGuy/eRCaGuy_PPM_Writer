@@ -1,6 +1,8 @@
 Readme Written: 2 July 2015  
 Readme Last Updated: 16 July 2017
 
+*NOTE: this code is essentially complete. It is not only partially done. It does not only sort-of work. This is one of my most professionally-written open source codes to date, and it works very well. Feel free to use it. Note the license used below.*
+
 ## Code License  
 ```
 /*
