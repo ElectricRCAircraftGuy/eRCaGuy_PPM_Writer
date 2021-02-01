@@ -52,9 +52,9 @@ CODE) ALSO BE RELEASED UNDER THE SAME LICENSE, AND BE OPEN-SOURCE FOR YOUR USERS
 */
 
 #if ARDUINO >= 100
-#    include <Arduino.h>
+    #include <Arduino.h>
 #else
-#    include <WProgram.h>
+    #include <WProgram.h>
 #endif
 
 #include <util/atomic.h>  //http://www.nongnu.org/avr-libc/user-manual/group__util__atomic.html

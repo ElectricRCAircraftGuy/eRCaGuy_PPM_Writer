@@ -75,9 +75,9 @@ CODE) ALSO BE RELEASED UNDER THE SAME LICENSE, AND BE OPEN-SOURCE FOR YOUR USERS
 #define eRCaGuy_PPM_Writer_h
 
 #if ARDUINO >= 100
-#    include <Arduino.h>
+    #include <Arduino.h>
 #else
-#    include <WProgram.h>
+    #include <WProgram.h>
 #endif
 
 // Constants
