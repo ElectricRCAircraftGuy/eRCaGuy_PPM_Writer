@@ -43,7 +43,7 @@ Readme Last Updated: 16 July 2017
 ```
 
 ## Instructions  
-Connect the PPM output signal (currently on Arduino pin D9) to the trainer port input on an RC Tx, through a 1k~10k resistor for protection to the Arduino and Radio.  
+Connect the PPM output signal (currently on Arduino pin D9) to the trainer port input on an RC Tx, through a 1k\~10k resistor for protection to the Arduino and Radio.  
 
 ## Basic Summary  
 This is a very thorough and versatile RC PPM generator program to generate a Pulse Position Modulation signal for RC use. Since it utilizes sophisticated hardware regiser techniques, the output PPM signal is high-fidelity and jitter-free. 
@@ -62,3 +62,6 @@ I hope you find this useful.
 Sincerely,  
 Gabriel Staples  
 http://www.ElectricRCAircraftGuy.com  
+
+
+_This library layout and structure conforms with the [Arduino Library specification 1.5 library format (rev. 2.2)](https://arduino.github.io/arduino-cli/latest/library-specification/)._
