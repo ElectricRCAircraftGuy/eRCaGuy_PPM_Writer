@@ -11,7 +11,7 @@ THIS_DIR="$(dirname "$THIS_PATH")"
 # in the regular expression just below
 FILE_LIST="$(find "$THIS_DIR" | grep -E ".*(\.ino|\.cpp|\.c|\.h|\.hpp|\.hh)$")"
 
-echo -e "Files found to format = \n\"\"\"\n$FILE_LIST\n\"\"\""
+# echo -e "Files found to format = \n\"\"\"\n$FILE_LIST\n\"\"\""  # for debugging
 
 # Format each file.
 # - NB: do NOT put quotes around `$FILE_LIST` below or else the `clang-format` command will
