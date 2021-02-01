@@ -17,23 +17,23 @@ Pin Mapping: https://www.arduino.cc/en/Hacking/PinMapping168
 ===================================================================================================
   LICENSE & DISCLAIMER
   Copyright (C) 2015 Gabriel Staples.  All right reserved.
-  
+
   This file is part of eRCaGuy_PPM_Writer.
-  
+
   I AM WILLING TO DUAL-LICENSE THIS SOFTWARE--EX: BY SELLING YOU A SEPARATE COMMERICAL LICENSE FOR
-  PRORPRIETARY USE. HOWEVER, UNLESS YOU HAVE PAID FOR AND RECEIVED A RECEIPT FOR AN ALTERNATE 
+  PRORPRIETARY USE. HOWEVER, UNLESS YOU HAVE PAID FOR AND RECEIVED A RECEIPT FOR AN ALTERNATE
   LICENSE AGREEMENT, FROM ME, THE COPYRIGHT OWNER, THIS SOFTWARE IS LICENSED UNDER THE GNU GPLV3
   OR LATER, A COPY-LEFT LICENSE, AS FOLLOWS.
-  
-  NB: THE GNU GPLV3 LICENSE IS AN OPEN SOURCE LICENSE WHICH REQUIRES THAT ALL DERIVATIVE WORKS 
-  YOU CREATE (IE: *ANY AND ALL* CODE YOU HAVE LINKING TO, BORROWING FROM, OR OTHERWISE USING THIS CODE) 
+
+  NB: THE GNU GPLV3 LICENSE IS AN OPEN SOURCE LICENSE WHICH REQUIRES THAT ALL DERIVATIVE WORKS
+  YOU CREATE (IE: *ANY AND ALL* CODE YOU HAVE LINKING TO, BORROWING FROM, OR OTHERWISE USING THIS CODE)
   ALSO BE RELEASED UNDER THE SAME LICENSE, AND BE OPEN-SOURCE FOR YOUR USERS AND/OR CUSTOMERS.
   FOR ALL STIPULATIONS AND LEGAL DETAILS, REFER TO THE FULL LICENSE AGREEMENT.
-  
+
   ------------------------------------------------------------------------------------------------
   License: GNU General Public License Version 3 (GPLv3) - https://www.gnu.org/licenses/gpl.html
   ------------------------------------------------------------------------------------------------
-  
+
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
@@ -59,7 +59,7 @@ Pin Mapping: https://www.arduino.cc/en/Hacking/PinMapping168
 #include <util/atomic.h> //http://www.nongnu.org/avr-libc/user-manual/group__util__atomic.html
 
 //NOTE/TODO: ALLOW ONE TO CHOOSE WHICH TIMER YOU'D LIKE TO USE FOR THIS LIBRARY IN THE "eRCaGuy_TimerCounterTimers.h" file
-#include "eRCaGuy_TimerCounterTimers.h"
+#include "timers/eRCaGuy_TimerCounterTimers.h"
 
 //macros
 #define readPinA() (PINB & _BV(1)) //Arduino pin 9
@@ -78,9 +78,9 @@ Pin Mapping: https://www.arduino.cc/en/Hacking/PinMapping168
 #define PROFILE_PINA3_LOW   PORTC &= ~_BV(3) //write Arduino pin A3 LOW
 
 //UPDATE 20160331-1738 HRS: THE BELOW IS A REALLY BAD IDEA AND COMPLETELY GLITCHES THE PPM OUTPUT LIKE CRAZY ON OCCASION, SO JUST GET RID OF IT ALTOGETHER. NO MORE NESTED INTERRUPTS!--unless you want to guarantee a crashed airplane/multirotor due to this stinking code :) ~GS.///////////////////////
-/* //For locking ISRs to prevent re-entrant execution when nested interrupts are enabled 
+/* //For locking ISRs to prevent re-entrant execution when nested interrupts are enabled
 //-ex: to prevent re-entrant execution of this ISR even though ***nested interrupts are enabled!***
-//-"return" is to exit the function if the ISR is locked 
+//-"return" is to exit the function if the ISR is locked
 #define functionLock()              \
   static bool ISR_locked = false;   \
   if (ISR_locked==true)             \
@@ -97,7 +97,7 @@ eRCaGuy_PPM_Writer PPMWriter; //preinstantiation of object
 
 //--------------------------------------------------------------------------------------------------------
 //Timer 1 Compare Match A interrupt
-//-NB: ISR_NOBLOCK allows neste interrupts within this ISR 
+//-NB: ISR_NOBLOCK allows neste interrupts within this ISR
 //--------------------------------------------------------------------------------------------------------
 // ISR(TIMER1_COMPA_vect,ISR_NOBLOCK)
 ISR(TIMER1_COMPA_vect,ISR_BLOCK)
@@ -110,7 +110,7 @@ ISR(TIMER1_COMPA_vect,ISR_BLOCK)
 //--------------------------------------------------------------------------------------------------------
 //Timer 1 Overflow Interrupt
 //--------------------------------------------------------------------------------------------------------
-ISR(TIMER1_OVF_vect,ISR_BLOCK) //Timer1's counter has overflowed 
+ISR(TIMER1_OVF_vect,ISR_BLOCK) //Timer1's counter has overflowed
 {
   PPMWriter.overflowISR();
 }
@@ -118,39 +118,39 @@ ISR(TIMER1_OVF_vect,ISR_BLOCK) //Timer1's counter has overflowed
 //--------------------------------------------------------------------------------------------------------
 //compareMatchISR
 //-Here is where the magic happens (ie: the actual writing of the PPM signal)
-//-NESTED INTERRUPTS ENABLED HERE <--CANCEL THAT; IT'S A BAD IDEA; see above: if ISR_BLOCK is in use, it does NOT allow nested interrupts 
+//-NESTED INTERRUPTS ENABLED HERE <--CANCEL THAT; IT'S A BAD IDEA; see above: if ISR_BLOCK is in use, it does NOT allow nested interrupts
 //--------------------------------------------------------------------------------------------------------
 inline void eRCaGuy_PPM_Writer::compareMatchISR()
 {
-  // PROFILE_PINA3_HIGH; /////////////FOR PROFILING WITH OSCILLOSCOPE; result: ~5us with functionLock uncommented and nested interrupts allowed, and ~the same (~5us) with functionLock commented out and nested interrupts NOT allowed 
-  // functionLock(); //prevent re-entrant execution of this function even though ***nested interrupts*** are enabled 
-  
-  //local variables 
-  long incrementVal; //units of 0.5us; make long too allow for (and later be able to handle) the rare case of negative values, which would occur if someone tries to set the PPM period too short 
-  
+  // PROFILE_PINA3_HIGH; /////////////FOR PROFILING WITH OSCILLOSCOPE; result: ~5us with functionLock uncommented and nested interrupts allowed, and ~the same (~5us) with functionLock commented out and nested interrupts NOT allowed
+  // functionLock(); //prevent re-entrant execution of this function even though ***nested interrupts*** are enabled
+
+  //local variables
+  long incrementVal; //units of 0.5us; make long too allow for (and later be able to handle) the rare case of negative values, which would occur if someone tries to set the PPM period too short
+
   if (_currentState==FIRST_EDGE)
   {
-    //local variable 
+    //local variable
     byte lastChannel_i = _currentChannel_i - 1;
     if (_currentChannel_i==0)
     {
       lastChannel_i = _numChannels; //ex: for 8 channels, lastChannel_i is now equal to 8. Since the 8 channels take bits 0 to 7 in the _channelFlags variable, bit 8 corresponds to the FrameSpace "channel" which occurred after channel 8
-      
+
       //if we are on the FIRST_EDGE *AND* the first channel, then it means we are at the *VERY START* of a new PPM frame, so the last PPM frame has just completed!
       _timeSinceFrameStart = 0; //0.5us; reset
       _frameNumber++;
     }
     //each first edge signifies the END of _currentChannel_i-1 and the START of _currentChannel_i, so let's set the bit to indicate which channel was just written!
     bitSet(_channelFlags,lastChannel_i);
-    
+
     incrementVal = _channelSpace; //0.5us
     _currentState = SECOND_EDGE; //move to next state in the state machine
   }
   else //_currentState==SECOND_EDGE
   {
-    if (_currentChannel_i < _numChannels) 
+    if (_currentChannel_i < _numChannels)
     {
-      //we are writing a channel value 
+      //we are writing a channel value
       incrementVal = _channels[_currentChannel_i] - _channelSpace; //0.5us units
       _currentChannel_i++;
     }
@@ -158,18 +158,18 @@ inline void eRCaGuy_PPM_Writer::compareMatchISR()
     {
       //we are writing a frame space value (ie: the time between the end of one PPM frame and the start of another PPM frame)
       ensurePPMPolarity();
-      incrementVal = _pd - _timeSinceFrameStart; //0.5us units 
+      incrementVal = _pd - _timeSinceFrameStart; //0.5us units
       //constrain this frame space period; ie: force a minimum value, even at the cost of not reaching the desired PPM output frequency
       incrementVal = max(incrementVal,_minFrameSpace);
-      _currentChannel_i = 0; //reset back to the first channel 
+      _currentChannel_i = 0; //reset back to the first channel
     }
     _currentState = FIRST_EDGE; //move to next state in the state machine
   }
-  
+
   //set up NEXT signal toggle on the OC1A pin
-  OCR1A += incrementVal; 
+  OCR1A += incrementVal;
   _timeSinceFrameStart += incrementVal; //0.5us; this will be the time elapsed at the start of the NEXT Compare Match A interrupt
-  
+
   // functionUnlock();
   // PROFILE_PINA3_LOW; /////////////FOR PROFILING WITH OSCILLOSCOPE
 }
@@ -181,12 +181,12 @@ inline void eRCaGuy_PPM_Writer::compareMatchISR()
 //--------------------------------------------------------------------------------------------------------
 inline void eRCaGuy_PPM_Writer::overflowISR()
 {
-  // functionLock(); //prevent re-entrant execution of this function even though ***nested interrupts*** are enabled 
-  
+  // functionLock(); //prevent re-entrant execution of this function even though ***nested interrupts*** are enabled
+
   _overflowCount++;
   if (_userOverflowFuncOn)
     _p_userOverflowFunction(); //call the user-attached function
-  
+
   // functionUnlock();
 }
 
@@ -212,8 +212,8 @@ eRCaGuy_PPM_Writer::eRCaGuy_PPM_Writer()
   _minFrameSpace = DEFAULT_MIN_FRAME_SPACE; //0.5us
   _channelSpace = DEFAULT_CHANNEL_SPACE; //0.5us
   _frameNumber = 0;
-  _PPMPolarity = PPM_WRITER_NORMAL; 
-  _overflowCount = 0; //for 0.5us timestamps 
+  _PPMPolarity = PPM_WRITER_NORMAL;
+  _overflowCount = 0; //for 0.5us timestamps
   _userOverflowFuncOn = false;
 }
 
@@ -227,9 +227,9 @@ void eRCaGuy_PPM_Writer::begin()
   _currentState = FIRST_EDGE;
   _currentChannel_i = 0;
   _timeSinceFrameStart = 0; //0.5us units
-  
+
   makePinAOUTPUT();
-  
+
   //configure Timer1 to NORMAL mode (see datasheet Table 16-4, pg. 133)
   //  Mode 0: WGM13=0, WGM12=0, WGM11=0, WGM10=0
   //Toggle OC1A on Compare Match (datasheet Table 16-1, pg. 132)
@@ -239,12 +239,12 @@ void eRCaGuy_PPM_Writer::begin()
   //TCCR1A pg. 132; TCCR1B pg. 134
   TCCR1A = _BV(COM1A0);
   TCCR1B = _BV(CS11);
-  
+
   OCR1A = TCNT1 + 100; //set to interrupt (to begin PPM signal generation) 50us (100 counts) from now
-  
+
   TIMSK1 = _BV(OCIE1A); //enable Output Compare A interrupt (TIMSK1, datasheet pg. 136)
   overflowInterruptOn();
-  
+
   ensurePPMPolarity();
 }
 
@@ -266,7 +266,7 @@ unsigned long eRCaGuy_PPM_Writer::getCount()
     bool overflowFlag = bitRead(TIFRn,0); //grab the timer overflow flag value; see datasheet pg. 160, for ex.
     if (overflowFlag) //if the overflow flag is set
     {
-      TCNTn_save = TCNTn; //update variable just saved since the overflow flag could have just tripped between previously saving the TCNTn value and reading bit 0 of TIFRn. If this is the case, TCNTn might have just changed from 255 to 0 (for an 8-bit timer), and so we need to grab the new value of TCNTn to prevent an error of up to 127.5us in any time obtained using this counter. (Note: 255 counts / 2 counts/us = 127.5us). 
+      TCNTn_save = TCNTn; //update variable just saved since the overflow flag could have just tripped between previously saving the TCNTn value and reading bit 0 of TIFRn. If this is the case, TCNTn might have just changed from 255 to 0 (for an 8-bit timer), and so we need to grab the new value of TCNTn to prevent an error of up to 127.5us in any time obtained using this counter. (Note: 255 counts / 2 counts/us = 127.5us).
       //Note: this line of code DID in fact fix the error just described, in which I periodically saw an error of ~127.5us in some values read in by some PWM read code I wrote.
       _overflowCount++; //force the overflow count to increment
       TIFRn |= _BV(0); //reset the Timer overflow flag since we just manually incremented above; ex: see datasheet pg. 160; this prevents execution of the timer's overflow ISR
@@ -278,18 +278,18 @@ unsigned long eRCaGuy_PPM_Writer::getCount()
 }
 
 //--------------------------------------------------------------------------------------------------------
-//getMicros 
-//-returns the 32-bit timer time, with full resolution, as a float. 
-//--Ex: for a 16Mhz Arduino, with prescaler of 8, the resolution is 0.5us per count; with prescaler of 1, the resolution is 0.0625us per count. Both of these are better than the default Arduino micros() resolution of 4us 
+//getMicros
+//-returns the 32-bit timer time, with full resolution, as a float.
+//--Ex: for a 16Mhz Arduino, with prescaler of 8, the resolution is 0.5us per count; with prescaler of 1, the resolution is 0.0625us per count. Both of these are better than the default Arduino micros() resolution of 4us
 //-this function is slower than calling getCount() and therefore is not the preferred way of getting time. It is better to get the time by calling getCount() then dividing the value by the appropriate divisor to convert to us.
 //--------------------------------------------------------------------------------------------------------
 float eRCaGuy_PPM_Writer::getMicros()
 {
-  return (float)getCount()/2; //returns a time stamp in us 
+  return (float)getCount()/2; //returns a time stamp in us
 }
 
 //--------------------------------------------------------------------------------------------------------
-//overflowInterruptOff 
+//overflowInterruptOff
 //-turns off the timer's overflow interrupt so that you no longer interrupt your code (every 128us for an 8-bit timer with prescaler of 8) in order to increment your overflow counter.
 //-This may be desirable when you are no longer needing timestamps and want your main code or other interrupts to run more jitter-free, but you don't want to call end() in order to change all of the timer's settings back to default.
 //-Assuming 16Mhz Arduino, 8-bit timer, and prescaler of 8 (ie: 0.5us/count), turning off the overflow interrupt will give you savings of approximately 4~5us every 128us. This is a CPU processing time savings of ~4%.
@@ -302,9 +302,9 @@ void eRCaGuy_PPM_Writer::overflowInterruptOff()
 }
 
 //--------------------------------------------------------------------------------------------------------
-//overflowInterruptOn 
+//overflowInterruptOn
 //-turns the timer's overflow interrupt back on, so that the overflow counter will start to increment again
-//-see "overflowInterruptOff" for details 
+//-see "overflowInterruptOff" for details
 //--------------------------------------------------------------------------------------------------------
 void eRCaGuy_PPM_Writer::overflowInterruptOn()
 {
@@ -323,7 +323,7 @@ void eRCaGuy_PPM_Writer::attachOverflowInterrupt(void (*myFunc)())
   noInterrupts();
     _userOverflowFuncOn = true;
     _p_userOverflowFunction = myFunc; //attach function
-  SREG = SREGbak; //restore interrupt state 
+  SREG = SREGbak; //restore interrupt state
 }
 
 //--------------------------------------------------------------------------------------------------------
@@ -351,7 +351,7 @@ inline void eRCaGuy_PPM_Writer::ensurePPMPolarity()
   }
   else //_PPMPolarity==PPM_WRITER_INVERTED
   {
-    //ensure pin is LOW before start 
+    //ensure pin is LOW before start
     if (readPinA()==HIGH)
       togglePinA();
   }
@@ -364,10 +364,10 @@ inline void eRCaGuy_PPM_Writer::ensurePPMPolarity()
 void eRCaGuy_PPM_Writer::end()
 {
   //turn off the Output Compare Interrupt (TIMSK1, datasheet pg. 136)
-  TIMSK1 &= ~_BV(OCIE1A);  
+  TIMSK1 &= ~_BV(OCIE1A);
   //disconnect OC1A (see datasheet pg 132)
   TCCR1A &= ~(_BV(COM1A1) | _BV(COM1A0)); //note: once OC1A is disconnected, the pin state goes back to the last state (HIGH or LOW) written to the port output register via either direct port manipulation, OR the Arduino digitalWrite() command!
-  //for pin protection (in case of dual-purposing this pin for some reason), force LOW and make input 
+  //for pin protection (in case of dual-purposing this pin for some reason), force LOW and make input
   writePinALOW();
   makePinAINPUT();
 }
@@ -403,7 +403,7 @@ boolean eRCaGuy_PPM_Writer::readChannelFlag(byte channel_i)
 
 //--------------------------------------------------------------------------------------------------------
 //setChannelVal
-//-write 0.5us value to the channel located at channel index channel_i. 
+//-write 0.5us value to the channel located at channel index channel_i.
 //-Channels are zero-indexed, so Channel 1 is index 0, channel 2 is index 1, etc.
 //-channel values are in units of timer counts, which are 0.5us each, so multiply us x 2 to get counts.
 //-Ex: to set the 1st channel to 1500us, call: setChannelVal(0,1500*2);
@@ -415,7 +415,7 @@ void eRCaGuy_PPM_Writer::setChannelVal(byte channel_i, unsigned int val)
   {
     //constrain within valid bounds
     val = constrain(val,_minChannelVal,_maxChannelVal);
-    
+
     //ensure atomic access to volatile variables
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
     {
@@ -426,7 +426,7 @@ void eRCaGuy_PPM_Writer::setChannelVal(byte channel_i, unsigned int val)
 
 //--------------------------------------------------------------------------------------------------------
 //setPPMPeriod
-//-control the PPM output frequency by setting the desired PPM train frame period directly 
+//-control the PPM output frequency by setting the desired PPM train frame period directly
 //-units are 0.5us
 //-currently, the longest value you can set is 2^16 - 1, or 65535, since the longest timer/counter is only 16-bits, and I'm not taking into account roll-overs beyond the length of the timer/counter, *yet*. ***********TODO: do take them into account so I can start using 8-bit timer/counters for this library too.***************
 //-ex: setPPMPeriod(20000*2) sets a pd of 20000us (40000 0.5us counts), which results in a PPM freq. of 1/20ms=50Hz
@@ -444,7 +444,7 @@ void eRCaGuy_PPM_Writer::setPPMPeriod(unsigned long pd)
 
 //--------------------------------------------------------------------------------------------------------
 //setNumChannels
-//-set the number of channels to be present in the PPM train 
+//-set the number of channels to be present in the PPM train
 //-NB: READ THE WARNING AND EXAMPLE IN THE "setPPMPeriod" DESCRIPTION ABOVE.
 //--------------------------------------------------------------------------------------------------------
 void eRCaGuy_PPM_Writer::setNumChannels(byte numChannels)
@@ -459,7 +459,7 @@ void eRCaGuy_PPM_Writer::setNumChannels(byte numChannels)
 
 //--------------------------------------------------------------------------------------------------------
 //setMaxChannelVal
-//-set the maximum value a channel can be set to, in units of 0.5us 
+//-set the maximum value a channel can be set to, in units of 0.5us
 //-Ex: to set the the maximum channel value to 2100us, call: setMaxChannelVal(2100*2);
 //-NB: READ THE WARNING AND EXAMPLE IN THE "setPPMPeriod" DESCRIPTION ABOVE.
 //--------------------------------------------------------------------------------------------------------
@@ -470,7 +470,7 @@ void eRCaGuy_PPM_Writer::setMaxChannelVal(unsigned int maxVal)
 
 //--------------------------------------------------------------------------------------------------------
 //setMinChannelVal
-//-set the minimum value a channel can be set to, in units of 0.5us 
+//-set the minimum value a channel can be set to, in units of 0.5us
 //-Ex: to set the the minimum channel value to 900us, call: setMinChannelVal(900*2);
 //-NB: READ THE WARNING AND EXAMPLE IN THE "setPPMPeriod" DESCRIPTION ABOVE.
 //--------------------------------------------------------------------------------------------------------
@@ -512,9 +512,9 @@ void eRCaGuy_PPM_Writer::setChannelSpace(unsigned int channelSpace)
 
 //--------------------------------------------------------------------------------------------------------
 //setFrameNumber
-//-manually set the frameNumber to a specific value; ex: 0, to reset it 
+//-manually set the frameNumber to a specific value; ex: 0, to reset it
 //-the frameNumber is the # of PPM frames that have *already been sent*
-//-it is incremented at the first edge of a new PPM frame, which marks the end of the previous PPM frame and the start of the 1st channel of the new PPM frame 
+//-it is incremented at the first edge of a new PPM frame, which marks the end of the previous PPM frame and the start of the 1st channel of the new PPM frame
 //--------------------------------------------------------------------------------------------------------
 void eRCaGuy_PPM_Writer::setFrameNumber(unsigned long frameNum)
 {
@@ -528,8 +528,8 @@ void eRCaGuy_PPM_Writer::setFrameNumber(unsigned long frameNum)
 //--------------------------------------------------------------------------------------------------------
 //setPPMPolarity
 //-set the PPM signal train to either PPM_WRITER_NORMAL or PPM_WRITER_INVERTED.
-//-PPM_WRITER_NORMAL has a HIGH base-line signal, with channelSpace pulses that are LOW 
-//-PPM_WRITER_INVERTED has a LOW base-line signal, with channelSpace pulses that are HIGH  
+//-PPM_WRITER_NORMAL has a HIGH base-line signal, with channelSpace pulses that are LOW
+//-PPM_WRITER_INVERTED has a LOW base-line signal, with channelSpace pulses that are HIGH
 //-to set the polarity to be inverted, for instance, call: setPPMPolarity(PPM_WRITER_INVERTED);
 //--------------------------------------------------------------------------------------------------------
 void eRCaGuy_PPM_Writer::setPPMPolarity(boolean PPMPolarity)
@@ -549,19 +549,19 @@ void eRCaGuy_PPM_Writer::setPPMPolarity(boolean PPMPolarity)
 //getChannelVal
 //-read the 0.5us value currently being written on this channel index location
 //-channels are zero-indexed, so the 1st channel is at index 0
-//-the channelVal is in units of timer counts, which are 0.5us each, so divide by 2 to get us 
+//-the channelVal is in units of timer counts, which are 0.5us each, so divide by 2 to get us
 //--Ex: to get the us value being written to channel 1, call: getChannelVal(0)/2;
 //--------------------------------------------------------------------------------------------------------
 unsigned int eRCaGuy_PPM_Writer::getChannelVal(byte channel_i)
 {
-  //Note: forced atomic access NOT required on _numChannels and _channels below since they are only being READ here, AND since they are NOT ever written to (modified) in an ISR 
-  
+  //Note: forced atomic access NOT required on _numChannels and _channels below since they are only being READ here, AND since they are NOT ever written to (modified) in an ISR
+
   //only perform this action on a valid channel
   if (channel_i < _numChannels)
   {
     return _channels[channel_i];
   }
-  else //not a valid channel 
+  else //not a valid channel
     return 0;
 }
 
@@ -595,8 +595,8 @@ byte eRCaGuy_PPM_Writer::getNumChannels()
 
 //--------------------------------------------------------------------------------------------------------
 //getMaxChannelVal()
-//-get the max value a channel can be set to, in units of 0.5us 
-//--Ex: to get the max channel value allowed, in us, call: getMaxChannelVal()/2; 
+//-get the max value a channel can be set to, in units of 0.5us
+//--Ex: to get the max channel value allowed, in us, call: getMaxChannelVal()/2;
 //--------------------------------------------------------------------------------------------------------
 unsigned int eRCaGuy_PPM_Writer::getMaxChannelVal()
 {
@@ -605,8 +605,8 @@ unsigned int eRCaGuy_PPM_Writer::getMaxChannelVal()
 
 //--------------------------------------------------------------------------------------------------------
 //getMinChannelVal()
-//-get the min value a channel can be set to, in units of 0.5us 
-//--Ex: to get the min channel value allowed, in us, call: getMinChannelVal()/2; 
+//-get the min value a channel can be set to, in units of 0.5us
+//--Ex: to get the min channel value allowed, in us, call: getMinChannelVal()/2;
 //--------------------------------------------------------------------------------------------------------
 unsigned int eRCaGuy_PPM_Writer::getMinChannelVal()
 {
@@ -616,9 +616,9 @@ unsigned int eRCaGuy_PPM_Writer::getMinChannelVal()
 //--------------------------------------------------------------------------------------------------------
 //getMinFrameSpace()
 //-units of 0.5us
-//-get the min frame space you are permitting after the last channel in the PPM train, and before the first channel of the next frame in the PPM train 
+//-get the min frame space you are permitting after the last channel in the PPM train, and before the first channel of the next frame in the PPM train
 //-FOR MORE INFO SEE THE DESCRIPTION FOR "setMinFrameSpace"
-//--Ex: to get the minFrameSpace allowed, in us, call: getMinFrameSpace()/2; 
+//--Ex: to get the minFrameSpace allowed, in us, call: getMinFrameSpace()/2;
 //--------------------------------------------------------------------------------------------------------
 unsigned int eRCaGuy_PPM_Writer::getMinFrameSpace()
 {
@@ -636,9 +636,9 @@ unsigned int eRCaGuy_PPM_Writer::getChannelSpace()
 }
 
 //--------------------------------------------------------------------------------------------------------
-//getFrameNumber 
+//getFrameNumber
 //-the frameNumber is the # of PPM frames that have *already been sent*
-//-it is incremented at the first edge of a new PPM frame, which marks the end of the previous PPM frame and the start of the 1st channel of the new PPM frame 
+//-it is incremented at the first edge of a new PPM frame, which marks the end of the previous PPM frame and the start of the 1st channel of the new PPM frame
 //--------------------------------------------------------------------------------------------------------
 unsigned long eRCaGuy_PPM_Writer::getFrameNumber()
 {
@@ -654,8 +654,8 @@ unsigned long eRCaGuy_PPM_Writer::getFrameNumber()
 //--------------------------------------------------------------------------------------------------------
 //getPPMPolarity
 //-read whether the PPMPolarity is set to PPM_WRITER_NORMAL (0) or PPM_WRITER_INVERTED (1).
-//-PPM_WRITER_NORMAL has a HIGH base-line signal, with channelSpace pulses that are LOW 
-//-PPM_WRITER_INVERTED has a LOW base-line signal, with channelSpace pulses that are HIGH  
+//-PPM_WRITER_NORMAL has a HIGH base-line signal, with channelSpace pulses that are LOW
+//-PPM_WRITER_INVERTED has a LOW base-line signal, with channelSpace pulses that are HIGH
 //--------------------------------------------------------------------------------------------------------
 boolean eRCaGuy_PPM_Writer::getPPMPolarity()
 {
@@ -664,16 +664,16 @@ boolean eRCaGuy_PPM_Writer::getPPMPolarity()
 
 //--------------------------------------------------------------------------------------------------------
 //getCurrentChannel
-//-returns the PPM channel index for the channel which is *in the process of being* or *about to be* written to the PPM signal train! 
+//-returns the PPM channel index for the channel which is *in the process of being* or *about to be* written to the PPM signal train!
 //--------------------------------------------------------------------------------------------------------
 byte eRCaGuy_PPM_Writer::getCurrentChannel()
 {
-  return _currentChannel_i; //no need to force this operation to be atomic since it is a single byte; single byte variables automatically have atomic read/write access 
+  return _currentChannel_i; //no need to force this operation to be atomic since it is a single byte; single byte variables automatically have atomic read/write access
 }
 
 //--------------------------------------------------------------------------------------------------------
 //getTimeSincePPMFrameStart
-//-units of 0.5us 
+//-units of 0.5us
 //-returns the time, in 0.5us counts, which will be the time elapsed at the start of the NEXT Compare Match interrupt, since the beginning of this PPM Frame
 //--------------------------------------------------------------------------------------------------------
 unsigned long eRCaGuy_PPM_Writer::getTimeSincePPMFrameStart()
