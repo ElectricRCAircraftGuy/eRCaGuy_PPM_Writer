@@ -1,3 +1,5 @@
+[>> Sponsor Me on GitHub <<](https://github.com/sponsors/ElectricRCAircraftGuy)
+
 Readme Written: 2 July 2015  
 Readme Last Updated: 16 July 2017
 
